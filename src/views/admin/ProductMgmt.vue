@@ -2,9 +2,9 @@
 import { ref } from 'vue';
 
 const products = ref([
-  { id: 1, name: 'Giày Bóng Đá Nike Zoom', category: 'Giày', price: 1200000, stock: 50 },
-  { id: 2, name: 'Áo Thi Đấu Adidas', category: 'Quần Áo', price: 500000, stock: 100 },
-  { id: 3, name: 'Quả Bóng Động Lực', category: 'Phụ Kiện', price: 300000, stock: 200 },
+  { id: 1, code: 'SP001', name: 'Giày Bóng Đá Nike Zoom', category: 'Giày', price: 1200000, stock: 50 },
+  { id: 2, code: 'SP002', name: 'Áo Thi Đấu Adidas', category: 'Quần Áo', price: 500000, stock: 100 },
+  { id: 3, code: 'SP003', name: 'Quả Bóng Động Lực', category: 'Phụ Kiện', price: 300000, stock: 200 },
 ]);
 
 const confirmDelete = (name) => {
@@ -30,6 +30,7 @@ const confirmDelete = (name) => {
             <thead class="bg-light">
               <tr>
                 <th class="ps-4">ID</th>
+                <th>Mã Sản Phẩm</th>
                 <th>Tên Sản Phẩm</th>
                 <th>Danh Mục</th>
                 <th>Giá (VNĐ)</th>
@@ -40,11 +41,15 @@ const confirmDelete = (name) => {
             <tbody>
               <tr v-for="product in products" :key="product.id">
                 <td class="ps-4">#{{ product.id }}</td>
+                <td><span class="fw-medium">{{ product.code }}</span></td>
                 <td class="fw-bold">{{ product.name }}</td>
                 <td><span class="badge bg-info text-dark opacity-75">{{ product.category }}</span></td>
                 <td>{{ product.price.toLocaleString() }}</td>
                 <td>{{ product.stock }}</td>
                 <td class="text-end pe-4">
+                  <router-link :to="'/admin/products/edit/' + product.id" class="btn btn-sm btn-outline-info me-2" title="Xem chi tiết">
+                    <i class="fas fa-eye"></i>
+                  </router-link>
                   <router-link :to="'/admin/products/edit/' + product.id" class="btn btn-sm btn-outline-primary me-2">
                     <i class="fas fa-edit"></i>
                   </router-link>
