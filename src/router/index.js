@@ -13,6 +13,8 @@ const router = createRouter({
     { path: '/account', component: () => import('../views/user/AccountView.vue') },
     { path: '/orders', component: () => import('../views/user/OrderHistoryView.vue') },
     { path: '/order/:id', component: () => import('../views/user/OrderDetailView.vue') },
+    { path: '/wishlist', component: () => import('../views/user/WishlistView.vue') },
+    { path: '/checkout', component: () => import('../views/user/CheckoutView.vue') },
     // --- AUTH ---
     { path: '/login', component: () => import('../views/auth/LoginView.vue') },
     { path: '/register', component: () => import('../views/auth/RegisterView.vue') },

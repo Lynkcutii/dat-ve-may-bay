@@ -3,6 +3,7 @@ import { RouterView, useRoute } from 'vue-router'
 import { computed } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import AppFooter from './components/AppFooter.vue'
+import ChatBot from './components/ChatBot.vue'
 
 const route = useRoute()
 const isAdminPage = computed(() => route.path.startsWith('/admin'))
@@ -20,6 +21,9 @@ const isAdminPage = computed(() => route.path.startsWith('/admin'))
 
     <!-- Footer luôn ở dưới (ẩn nếu là trang admin) -->
     <AppFooter v-if="!isAdminPage" />
+
+    <!-- ChatBot (ẩn nếu là trang admin) -->
+    <ChatBot v-if="!isAdminPage" />
   </div>
 </template>
 

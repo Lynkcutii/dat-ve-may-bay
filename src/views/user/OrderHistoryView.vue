@@ -3,26 +3,26 @@
     <div class="row g-4">
       <!-- Sidebar (Kế thừa từ Account) -->
       <div class="col-lg-3">
-        <div class="bg-white rounded-4 shadow-sm p-4 h-100">
-          <div class="text-center mb-4 pb-4 border-bottom">
+        <div class="bg-white rounded-4 shadow-sm p-3 p-md-4 h-100">
+          <div class="text-center mb-4 pb-4 border-bottom d-none d-lg-block">
             <div class="avatar-placeholder bg-light rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
               <i class="fas fa-user fs-4 text-secondary"></i>
             </div>
             <h6 class="fw-bold mb-1 small">Nguyễn Văn A</h6>
           </div>
           
-          <div class="nav flex-column nav-pills small">
-            <router-link to="/account" class="nav-link text-dark text-start rounded-3 mb-2 px-3 py-2 fw-bold">
+          <div class="nav flex-lg-column nav-pills small flex-nowrap overflow-auto pb-2 pb-lg-0">
+            <router-link to="/account" class="nav-link text-dark text-start rounded-3 mb-lg-2 me-2 me-lg-0 px-3 py-2 fw-bold text-nowrap">
               <i class="far fa-user me-2"></i> Thông tin tài khoản
             </router-link>
-            <button class="nav-link active border-0 text-start rounded-3 mb-2 px-3 py-2 fw-bold shadow-none">
+            <button class="nav-link active border-0 text-start rounded-3 mb-lg-2 me-2 me-lg-0 px-3 py-2 fw-bold shadow-none text-nowrap">
               <i class="fas fa-history me-2"></i> Lịch sử đơn hàng
             </button>
-            <button class="nav-link text-dark text-start rounded-3 mb-2 px-3 py-2 fw-bold">
+            <button class="nav-link text-dark text-start rounded-3 mb-lg-2 me-2 me-lg-0 px-3 py-2 fw-bold text-nowrap">
               <i class="fas fa-map-marker-alt me-2"></i> Sổ địa chỉ
             </button>
-            <hr>
-            <button class="nav-link text-danger text-start rounded-3 px-3 py-2 fw-bold">
+            <div class="d-none d-lg-block"><hr></div>
+            <button class="nav-link text-danger text-start rounded-3 px-3 py-2 fw-bold text-nowrap">
               <i class="fas fa-sign-out-alt me-2"></i> Đăng xuất
             </button>
           </div>

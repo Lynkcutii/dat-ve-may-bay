@@ -1,11 +1,23 @@
 
+<script setup>
+import { ref } from 'vue'
+
+const isMobileMenuOpen = ref(false)
+const toggleMobileMenu = () => {
+  isMobileMenuOpen.value = !isMobileMenuOpen.value
+}
+</script>
 
 <template>
-  <nav class="navbar navbar-expand-lg navbar-light sticky-top main-header p-0">
+  <nav class="navbar navbar-expand-lg navbar-dark sticky-top main-header p-0">
     <div class="container-fluid px-lg-5 d-flex align-items-center justify-content-between">
       
       <!-- 1. LOGO (Bên trái) -->
-      <div class="header-left">
+      <div class="header-left d-flex align-items-center">
+        <!-- Hamburger Menu for Mobile -->
+        <button class="navbar-toggler border-0 shadow-none d-lg-none me-2" type="button" @click="toggleMobileMenu">
+          <i class="fas fa-bars text-white fs-4"></i>
+        </button>
         <router-link class="navbar-brand m-0 p-0" to="/">
           <img src="/src/img/logo2.jpg" alt="BeeSport" class="logo-img">
         </router-link>
@@ -41,7 +53,7 @@
       </div>
 
       <!-- 3. SEARCH & ICONS (Bên phải) -->
-      <div class="header-right d-flex align-items-center gap-3">
+      <div class="header-right d-flex align-items-center gap-2 gap-sm-3">
         <div class="search-box d-none d-xl-flex">
           <input type="text" placeholder="Tìm kiếm...">
           <i class="fas fa-search"></i>
@@ -56,6 +68,57 @@
         </div>
       </div>
 
+      <!-- MOBILE OVERLAY MENU -->
+      <div 
+        class="mobile-overlay d-lg-none" 
+        :class="{ 'show': isMobileMenuOpen }"
+        @click="toggleMobileMenu"
+      ></div>
+      
+      <div 
+        class="mobile-menu-content d-lg-none bg-white p-4"
+        :class="{ 'show': isMobileMenuOpen }"
+      >
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <img src="/src/img/logo2.jpg" height="40px">
+          <button class="btn btn-link text-dark p-0" @click="toggleMobileMenu">
+            <i class="fas fa-times fs-4"></i>
+          </button>
+        </div>
+        
+        <ul class="nav flex-column gap-3 fw-bold">
+          <li class="nav-item">
+            <router-link class="nav-link text-dark p-0" to="/" @click="isMobileMenuOpen = false">TRANG CHỦ</router-link>
+          </li>
+          <li class="nav-item">
+            <router-link class="nav-link text-dark p-0" to="/products" @click="isMobileMenuOpen = false">SẢN PHẨM</router-link>
+          </li>
+          <li class="nav-item ps-3 border-start">
+            <router-link class="nav-link text-secondary py-1 small" to="/products" @click="isMobileMenuOpen = false">Chạy bộ</router-link>
+            <router-link class="nav-link text-secondary py-1 small" to="/products" @click="isMobileMenuOpen = false">Cầu lông</router-link>
+            <router-link class="nav-link text-secondary py-1 small" to="/products" @click="isMobileMenuOpen = false">Đá bóng</router-link>
+          </li>
+          <li class="nav-item">
+            <router-link class="nav-link text-dark p-0" to="/about" @click="isMobileMenuOpen = false">GIỚI THIỆU</router-link>
+          </li>
+          <li class="nav-item">
+            <router-link class="nav-link text-dark p-0" to="/contact" @click="isMobileMenuOpen = false">LIÊN HỆ</router-link>
+          </li>
+        </ul>
+        
+        <div class="mt-5 border-top pt-4">
+          <div class="search-box w-100 mb-4">
+            <input type="text" placeholder="Tìm kiếm..." class="w-100">
+            <i class="fas fa-search"></i>
+          </div>
+          <div class="d-flex gap-4 fs-4 text-secondary justify-content-center">
+            <i class="fab fa-facebook"></i>
+            <i class="fab fa-instagram"></i>
+            <i class="fab fa-tiktok"></i>
+          </div>
+        </div>
+      </div>
+
     </div>
   </nav>
 </template>
@@ -63,16 +126,16 @@
 <style scoped>
 /* KHUNG HEADER */
 .main-header {
-  height: 90px;
-  box-shadow: 0 2px 15px rgba(0,0,0,0.05);
+  height: 80px;
+  box-shadow: 0 2px 15px rgba(0,0,0,0.1);
   background: #305a78;
+  z-index: 1030;
 }
 
 .logo-img {
-  height: 80px; /* Logo to rõ nét */
+  height: 60px;
   width: auto;
   display: block;
-  margin-left: 50px;
 }
 
 /* MENU CHÍNH */
@@ -80,7 +143,7 @@
   display: flex;
   list-style: none;
   align-items: center;
-  gap: 30px; /* Khoảng cách giữa các mục menu */
+  gap: 30px;
 }
 
 .menu-link {
@@ -89,14 +152,14 @@
   font-weight: 700;
   font-size: 14px;
   letter-spacing: 0.5px;
-  white-space: nowrap; /* QUAN TRỌNG: Ngăn chữ xuống dòng */
+  white-space: nowrap;
   padding: 10px 0;
   display: block;
   transition: 0.3s;
 }
 
 .menu-link:hover {
-  color: #dc3545 !important; /* Đổi màu khi hover */
+  color: #ffc107 !important;
 }
 
 /* HIỆU ỨNG HOVER SẢN PHẨM */
@@ -120,15 +183,10 @@
   z-index: 1000;
 }
 
-/* Hiện submenu và đổi màu link cha khi hover */
 .has-submenu:hover .submenu-box {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(0);
-}
-
-.has-submenu:hover .menu-link {
-  color: #dc3545 !important;
 }
 
 .submenu-box li a {
@@ -150,11 +208,12 @@
 
 /* THANH SEARCH & ICONS */
 .search-box {
-  background: #f4f4f4;
+  background: rgba(255,255,255,0.1);
   border-radius: 50px;
   padding: 7px 18px;
   display: flex;
   align-items: center;
+  border: 1px solid rgba(255,255,255,0.2);
 }
 
 .search-box input {
@@ -163,7 +222,10 @@
   outline: none;
   font-size: 12px;
   width: 140px;
+  color: #fff;
 }
+.search-box input::placeholder { color: rgba(255,255,255,0.6); }
+.search-box i { color: #fff; }
 
 .icon-item {
   color: #fff;
@@ -172,7 +234,7 @@
   transition: 0.3s;
 }
 
-.icon-item:hover { color: #dc3545; transform: translateY(-2px); }
+.icon-item:hover { color: #ffc107; transform: translateY(-2px); }
 
 .cart-badge {
   position: absolute;
@@ -185,11 +247,41 @@
   border-radius: 50px;
 }
 
-.icon-small { font-size: 10px; }
+/* MOBILE MENU */
+.mobile-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.5);
+  z-index: 1040;
+  opacity: 0;
+  visibility: hidden;
+  transition: 0.3s;
+}
+.mobile-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.mobile-menu-content {
+  position: fixed;
+  top: 0;
+  left: -280px;
+  width: 280px;
+  height: 100vh;
+  z-index: 1050;
+  transition: 0.3s;
+  box-shadow: 5px 0 15px rgba(0,0,0,0.1);
+}
+.mobile-menu-content.show {
+  left: 0;
+}
 
 /* RESPONSIVE */
 @media (max-width: 991px) {
-  .main-header { height: 75px; }
-  .logo-img { height: 45px; }
+  .main-header { height: 70px; }
+  .logo-img { height: 40px; }
 }
 </style>
