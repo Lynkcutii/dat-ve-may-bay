@@ -1,8 +1,41 @@
+<script setup>
+import { onMounted } from 'vue';
+import { useCartStore } from '@/stores/cart';
+
+const cartStore = useCartStore();
+
+onMounted(() => {
+  cartStore.fetchCart();
+});
+
+const formatPrice = (value) => {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+};
+
+const handleUpdateQuantity = async (spctId, delta) => {
+  try {
+    await cartStore.addToCart(spctId, delta);
+  } catch (error) {
+    alert("Có lỗi xảy ra khi cập nhật số lượng.");
+  }
+};
+</script>
+
 <template>
   <div class="container py-4 py-md-5">
     <h2 class="fw-bold mb-4 mb-md-5 text-center">GIỎ HÀNG CỦA BẠN</h2>
     
-    <div class="row g-4 g-lg-5">
+    <div v-if="cartStore.loading" class="text-center py-5">
+      <div class="spinner-border text-danger" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+    <div v-else-if="cartStore.items.length === 0" class="text-center py-5">
+      <i class="fas fa-shopping-cart fa-3x text-light mb-3"></i>
+      <p class="text-muted">Giỏ hàng của bạn đang trống.</p>
+      <router-link to="/products" class="btn btn-danger rounded-pill px-4">MUA SẮM NGAY</router-link>
+    </div>
+    <div v-else class="row g-4 g-lg-5">
       <!-- Cart Items -->
       <div class="col-lg-8">
         <div class="table-responsive-md bg-white rounded-4 shadow-sm p-3 p-md-4">
@@ -17,27 +50,29 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="i in 2" :key="i" class="cart-item">
+              <tr v-for="item in cartStore.items" :key="item.id" class="cart-item">
                 <td class="product-info-cell">
                   <div class="d-flex align-items-center">
-                    <img src="https://via.placeholder.com/80x100" class="rounded-3 me-3" alt="Product">
+                    <img :src="item.sanPhamChiTiet.sanPham.hinhAnhs?.[0]?.url || 'https://placehold.co/80x100'" class="rounded-3 me-3" alt="Product" style="width: 80px; height: 100px; object-fit: cover;">
                     <div>
-                      <h6 class="fw-bold mb-1 small text-truncate-1">Áo Thun Running Bee Pro {{ i }}</h6>
-                      <p class="text-secondary mb-0" style="font-size: 11px;">SIZE: L | MÀU: ĐEN</p>
+                      <h6 class="fw-bold mb-1 small text-truncate-1">{{ item.sanPhamChiTiet.sanPham.ten }}</h6>
+                      <p class="text-secondary mb-0" style="font-size: 11px;">
+                        SIZE: {{ item.sanPhamChiTiet.kichThuoc.ten }} | MÀU: {{ item.sanPhamChiTiet.mauSac.ten }}
+                      </p>
                       <!-- Mobile only price -->
-                      <div class="d-md-none mt-1 fw-bold text-danger">450.000đ</div>
+                      <div class="d-md-none mt-1 fw-bold text-danger">{{ formatPrice(item.sanPhamChiTiet.sanPham.giaGoc) }}</div>
                     </div>
                   </div>
                 </td>
-                <td class="d-none d-md-table-cell fw-bold small">450.000đ</td>
+                <td class="d-none d-md-table-cell fw-bold small">{{ formatPrice(item.sanPhamChiTiet.sanPham.giaGoc) }}</td>
                 <td class="quantity-cell">
                   <div class="input-group input-group-sm mx-auto mx-md-0" style="width: 100px;">
-                    <button class="btn btn-outline-secondary border shadow-none px-2"><i class="fas fa-minus small"></i></button>
-                    <input type="text" class="form-control text-center border-top border-bottom fw-bold px-1" value="1">
-                    <button class="btn btn-outline-secondary border shadow-none px-2"><i class="fas fa-plus small"></i></button>
+                    <button @click="handleUpdateQuantity(item.sanPhamChiTiet.id, -1)" class="btn btn-outline-secondary border shadow-none px-2" :disabled="item.soLuong <= 1"><i class="fas fa-minus small"></i></button>
+                    <input type="text" class="form-control text-center border-top border-bottom fw-bold px-1" :value="item.soLuong" readonly>
+                    <button @click="handleUpdateQuantity(item.sanPhamChiTiet.id, 1)" class="btn btn-outline-secondary border shadow-none px-2"><i class="fas fa-plus small"></i></button>
                   </div>
                 </td>
-                <td class="d-none d-md-table-cell text-end fw-bold text-danger small">450.000đ</td>
+                <td class="d-none d-md-table-cell text-end fw-bold text-danger small">{{ formatPrice(item.sanPhamChiTiet.sanPham.giaGoc * item.soLuong) }}</td>
                 <td class="text-end text-md-center">
                   <button class="btn btn-link text-secondary p-0 shadow-none"><i class="far fa-trash-alt"></i></button>
                 </td>
@@ -57,7 +92,7 @@
           <h5 class="fw-bold mb-4">TỔNG ĐƠN HÀNG</h5>
           <div class="d-flex justify-content-between mb-3 small">
             <span class="text-secondary">Tạm tính:</span>
-            <span class="fw-bold">900.000đ</span>
+            <span class="fw-bold">{{ formatPrice(cartStore.totalPrice) }}</span>
           </div>
           <div class="d-flex justify-content-between mb-3 small">
             <span class="text-secondary">Phí vận chuyển:</span>
@@ -66,7 +101,7 @@
           <hr>
           <div class="d-flex justify-content-between mb-4">
             <span class="fw-bold text-uppercase">Tổng cộng:</span>
-            <span class="fw-bold text-danger fs-5">900.000đ</span>
+            <span class="fw-bold text-danger fs-5">{{ formatPrice(cartStore.totalPrice) }}</span>
           </div>
           <router-link to="/checkout" class="btn btn-dark w-100 rounded-pill py-3 fw-bold mb-3 shadow text-decoration-none d-block text-center">THANH TOÁN NGAY</router-link>
           <div class="text-center pt-2">
@@ -114,12 +149,4 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-</style>
-
-<script setup>
-</script>
-
-<style scoped>
-.table th { border-top: none; }
-.form-control:focus { background: #f8f9fa; }
 </style>

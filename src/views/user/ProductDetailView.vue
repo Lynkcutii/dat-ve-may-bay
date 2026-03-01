@@ -1,17 +1,110 @@
+<script setup>
+import { ref, onMounted, computed } from 'vue';
+import { useRoute } from 'vue-router';
+import axios from 'axios';
+import { useCartStore } from '@/stores/cart';
+
+const route = useRoute();
+const cartStore = useCartStore();
+const apiBaseUrl = 'http://localhost:8080/api/user';
+
+const product = ref(null);
+const variants = ref([]);
+const loading = ref(true);
+const quantity = ref(1);
+
+const selectedColor = ref(null);
+const selectedSize = ref(null);
+
+const fetchData = async () => {
+  try {
+    loading.value = true;
+    const [prodRes, varRes] = await Promise.all([
+      axios.get(`${apiBaseUrl}/products/${route.params.id}`),
+      axios.get(`${apiBaseUrl}/products/${route.params.id}/variants`)
+    ]);
+    product.value = prodRes.data;
+    variants.value = varRes.data;
+    
+    if (variants.value.length > 0) {
+      selectedColor.value = variants.value[0].mauSac.ten;
+      selectedSize.value = variants.value[0].kichThuoc.ten;
+    }
+  } catch (error) {
+    console.error("Error fetching product detail:", error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+onMounted(() => {
+  fetchData();
+});
+
+const colors = computed(() => {
+  const allColors = variants.value.map(v => v.mauSac.ten);
+  return [...new Set(allColors)];
+});
+
+const sizes = computed(() => {
+  const allSizes = variants.value
+    .filter(v => v.mauSac.ten === selectedColor.value)
+    .map(v => v.kichThuoc.ten);
+  return [...new Set(allSizes)];
+});
+
+const selectedVariant = computed(() => {
+  return variants.value.find(v => v.mauSac.ten === selectedColor.value && v.kichThuoc.ten === selectedSize.value);
+});
+
+const formatPrice = (value) => {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+};
+
+const handleAddToCart = async () => {
+  if (!selectedVariant.value) {
+    alert("Vui lòng chọn màu sắc và kích thước!");
+    return;
+  }
+  try {
+    await cartStore.addToCart(selectedVariant.value.id, quantity.value);
+    alert("Đã thêm vào giỏ hàng!");
+  } catch (error) {
+    alert("Có lỗi xảy ra khi thêm vào giỏ hàng.");
+  }
+};
+
+const incrementQty = () => {
+  quantity.value++;
+};
+
+const decrementQty = () => {
+  if (quantity.value > 1) {
+    quantity.value--;
+  }
+};
+</script>
+
 <template>
   <div class="container py-5">
-    <div class="row g-5">
+    <div v-if="loading" class="text-center py-5">
+      <div class="spinner-border text-danger" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+    </div>
+    <div v-else-if="product" class="row g-5">
       <!-- Product Images -->
       <div class="col-lg-7">
         <div class="row g-3">
           <div class="col-2">
             <div class="d-flex flex-column gap-3 thumb-container">
-              <img v-for="i in 4" :key="i" src="https://via.placeholder.com/100x120" class="img-fluid rounded-3 cursor-pointer border shadow-sm thumb" alt="Thumb">
+              <img v-for="(img, i) in product.hinhAnhs" :key="i" :src="img.url" class="img-fluid rounded-3 cursor-pointer border shadow-sm thumb" alt="Thumb">
+              <img v-if="!product.hinhAnhs || product.hinhAnhs.length === 0" src="https://placehold.co/100x120" class="img-fluid rounded-3 cursor-pointer border shadow-sm thumb" alt="Thumb">
             </div>
           </div>
           <div class="col-10">
             <div class="main-img-container bg-white rounded-4 shadow-sm overflow-hidden border">
-              <img src="https://via.placeholder.com/600x750" class="img-fluid w-100 h-100 object-fit-cover" alt="Main Product Image">
+              <img :src="product.hinhAnhs && product.hinhAnhs.length > 0 ? product.hinhAnhs[0].url : 'https://placehold.co/600x750'" class="img-fluid w-100 h-100 object-fit-cover" alt="Main Product Image">
             </div>
           </div>
         </div>
@@ -28,7 +121,7 @@
             </ol>
           </nav>
 
-          <h2 class="fw-bold mb-3">Áo Thun Running Bee Pro</h2>
+          <h2 class="fw-bold mb-3">{{ product.ten }}</h2>
           <div class="d-flex align-items-center mb-4">
             <div class="text-warning me-2 small">
               <i class="fas fa-star" v-for="i in 5" :key="i"></i>
@@ -36,29 +129,37 @@
             <span class="text-secondary small">(12 đánh giá)</span>
           </div>
 
-          <h3 class="text-danger fw-bold mb-4 fs-2">450.000đ</h3>
+          <h3 class="text-danger fw-bold mb-4 fs-2">{{ formatPrice(product.giaGoc) }}</h3>
           
           <p class="text-secondary mb-5 small lh-lg">
-            Áo thun thể thao chuyên dụng dành cho chạy bộ và các hoạt động cường độ cao. Chất liệu vải mesh siêu nhẹ, thoáng khí, hỗ trợ thoát mồ hôi cực tốt giúp bạn luôn khô thoáng suốt buổi tập.
+            {{ product.moTa }}
           </p>
 
           <!-- Selectors -->
           <div class="mb-4">
-            <h6 class="fw-bold small mb-3 text-uppercase">Màu sắc: <span class="text-secondary fw-normal">Đen</span></h6>
+            <h6 class="fw-bold small mb-3 text-uppercase">Màu sắc: <span class="text-secondary fw-normal">{{ selectedColor }}</span></h6>
             <div class="d-flex gap-2">
-              <div class="color-swatch bg-dark active"></div>
-              <div class="color-swatch bg-primary"></div>
-              <div class="color-swatch bg-danger"></div>
+              <div 
+                v-for="color in colors" 
+                :key="color" 
+                class="color-swatch" 
+                :style="{ backgroundColor: color.toLowerCase() === 'đen' ? '#000' : (color.toLowerCase() === 'trắng' ? '#fff' : '#ddd') }"
+                :class="{ active: selectedColor === color }"
+                @click="selectedColor = color"
+              ></div>
             </div>
           </div>
 
           <div class="mb-5">
-            <h6 class="fw-bold small mb-3 text-uppercase">Kích thước: <span class="text-secondary fw-normal">L</span></h6>
+            <h6 class="fw-bold small mb-3 text-uppercase">Kích thước: <span class="text-secondary fw-normal">{{ selectedSize }}</span></h6>
             <div class="d-flex gap-2">
-              <div class="size-box active">S</div>
-              <div class="size-box">M</div>
-              <div class="size-box">L</div>
-              <div class="size-box">XL</div>
+              <div 
+                v-for="size in sizes" 
+                :key="size" 
+                class="size-box"
+                :class="{ active: selectedSize === size }"
+                @click="selectedSize = size"
+              >{{ size }}</div>
             </div>
           </div>
 
@@ -66,13 +167,13 @@
           <div class="row g-3 mb-5">
             <div class="col-4">
               <div class="qty-container d-flex align-items-center justify-content-between border rounded-pill px-3 py-2">
-                <button class="btn btn-link text-dark p-0 shadow-none"><i class="fas fa-minus small"></i></button>
-                <span class="fw-bold">1</span>
-                <button class="btn btn-link text-dark p-0 shadow-none"><i class="fas fa-plus small"></i></button>
+                <button @click="decrementQty" class="btn btn-link text-dark p-0 shadow-none"><i class="fas fa-minus small"></i></button>
+                <span class="fw-bold">{{ quantity }}</span>
+                <button @click="incrementQty" class="btn btn-link text-dark p-0 shadow-none"><i class="fas fa-plus small"></i></button>
               </div>
             </div>
             <div class="col-8">
-              <button class="btn btn-dark w-100 rounded-pill py-2 fw-bold shadow-sm">
+              <button @click="handleAddToCart" class="btn btn-dark w-100 rounded-pill py-2 fw-bold shadow-sm">
                 <i class="fas fa-shopping-cart me-2"></i> THÊM VÀO GIỎ HÀNG
               </button>
             </div>
@@ -80,8 +181,7 @@
 
           <!-- Meta -->
           <div class="pt-4 border-top">
-            <p class="small mb-2"><span class="fw-bold me-2">SKU:</span> <span class="text-secondary">BE-RUN-001</span></p>
-            <p class="small mb-2"><span class="fw-bold me-2">DANH MỤC:</span> <span class="text-secondary">Áo Thể Thao Nam</span></p>
+            <p class="small mb-2"><span class="fw-bold me-2">DANH MỤC:</span> <span class="text-secondary">{{ product.danhMuc?.ten }}</span></p>
             <div class="d-flex gap-3 mt-4">
               <a href="#" class="text-secondary small text-decoration-none"><i class="fab fa-facebook me-1"></i> Chia sẻ</a>
               <a href="#" class="text-secondary small text-decoration-none"><i class="fab fa-twitter me-1"></i> Tweet</a>
@@ -93,8 +193,6 @@
   </div>
 </template>
 
-<script setup>
-</script>
 
 <style scoped>
 .thumb-container .thumb {

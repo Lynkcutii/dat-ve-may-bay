@@ -1,29 +1,40 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
+import axios from 'axios';
 
-const categories = [
-  { id: 1, name: 'Chạy bộ' },
-  { id: 2, name: 'Đá bóng' },
-  { id: 3, name: 'Cầu lông' },
-  { id: 4, name: 'Bơi' },
-  { id: 5, name: 'Phụ Kiện' }
-];
+const apiBaseUrl = 'http://localhost:8080/api/user'; // Update if needed
 
-// DATA: Tạo 12 sản phẩm để demo phân trang 8sp/trang
-const allProducts = [
-  { id: 1, name: 'Áo Pro Running 01', price: 350000, category: 'Thời Trang Nam', isNew: true, image: 'https://images.unsplash.com/photo-1581009146145-b5ef03a7403f?q=80&w=400' },
-  { id: 2, name: 'Quần Short Gym 02', price: 280000, category: 'Thời Trang Nam', isNew: false, image: 'https://images.unsplash.com/photo-1591195853828-11db59a44f6b?q=80&w=400' },
-  { id: 3, name: 'Giày SpeedX 03', price: 1250000, category: 'Phụ Kiện', isNew: true, image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=400' },
-  { id: 4, name: 'Áo Hoodie Nỉ 04', price: 550000, category: 'Thời Trang Nam', isNew: false, image: 'https://images.unsplash.com/photo-1556821840-3a63f95609a7?q=80&w=400' },
-  { id: 5, name: 'Túi Trống Bee 05', price: 420000, category: 'Phụ Kiện', isNew: false, image: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?q=80&w=400' },
-  { id: 6, name: 'Bộ Yoga Nữ 06', price: 890000, category: 'Thời Trang Nữ', isNew: true, image: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=400' },
-  { id: 7, name: 'Áo Gió Nam 07', price: 650000, category: 'Thời Trang Nam', isNew: false, image: 'https://images.unsplash.com/photo-1591047139829-d91aecb6caea?q=80&w=400' },
-  { id: 8, name: 'Bình Nước 08', price: 150000, category: 'Phụ Kiện', isNew: true, image: 'https://images.unsplash.com/photo-1523362628745-0c100150b504?q=80&w=400' },
-  { id: 9, name: 'Tất Thể Thao 09', price: 50000, category: 'Phụ Kiện', isNew: false, image: 'https://images.unsplash.com/photo-1582562124811-c09040d0a901?q=80&w=400' },
-  { id: 10, name: 'Áo Polo Thể Thao 10', price: 390000, category: 'Thời Trang Nam', isNew: false, image: 'https://images.unsplash.com/photo-1586363104862-3a5e2ab60d99?q=80&w=400' },
-  { id: 11, name: 'Thảm Tập Yoga 11', price: 320000, category: 'Phụ Kiện', isNew: true, image: 'https://images.unsplash.com/photo-1592432676556-381e61846b07?q=80&w=400' },
-  { id: 12, name: 'Quần Legging Nữ 12', price: 450000, category: 'Thời Trang Nữ', isNew: false, image: 'https://images.unsplash.com/photo-1506629082955-511b1aa562c8?q=80&w=400' }
-];
+const categories = ref([]);
+const allProducts = ref([]);
+const loading = ref(true);
+
+// --- FETCH DATA ---
+const fetchData = async () => {
+  try {
+    loading.value = true;
+    const [catRes, prodRes] = await Promise.all([
+      axios.get(`${apiBaseUrl}/categories`),
+      axios.get(`${apiBaseUrl}/products`)
+    ]);
+    categories.value = catRes.data;
+    allProducts.value = prodRes.data.map(p => ({
+      id: p.id,
+      name: p.ten,
+      price: p.giaGoc,
+      category: p.danhMuc ? p.danhMuc.ten : 'Khác',
+      isNew: true, // Logic for "new" can be added later
+      image: p.hinhAnhs && p.hinhAnhs.length > 0 ? p.hinhAnhs[0].url : 'https://placehold.co/400x400?text=No+Image'
+    }));
+  } catch (error) {
+    console.error("Error fetching data:", error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+onMounted(() => {
+  fetchData();
+});
 
 // --- BIẾN LỌC ---
 const maxPrice = ref(2000000);
@@ -49,7 +60,7 @@ const toggleFilter = () => {
 
 // --- LOGIC LỌC SẢN PHẨM ---
 const filteredProducts = computed(() => {
-  return allProducts.filter(p => {
+  return allProducts.value.filter(p => {
     const matchPrice = p.price <= maxPrice.value;
     const matchCat = selectedCats.value.length === 0 || selectedCats.value.includes(p.category);
     return matchPrice && matchCat;
@@ -72,7 +83,13 @@ watch([maxPrice, selectedCats], () => {
 
 <template>
   <div class="container py-4 py-md-5">
-    <div class="row g-4">
+    <div v-if="loading" class="text-center py-5">
+      <div class="spinner-border text-danger" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2 text-muted">Đang tải sản phẩm...</p>
+    </div>
+    <div v-else class="row g-4">
       <!-- Mobile Filter Toggle -->
       <div class="col-12 d-lg-none mb-2">
         <button class="btn btn-dark w-100 rounded-pill fw-bold" @click="toggleFilter">
@@ -93,7 +110,7 @@ watch([maxPrice, selectedCats], () => {
             </button>
           </div>
           
-          <!-- Lọc theo Giá (Đã kết nối logic) -->
+          <!-- Lọc theo Giá -->
           <div class="mb-4">
             <h6 class="fw-bold small mb-3 text-uppercase">Giá tối đa: <span class="text-danger">{{ formatPrice(maxPrice) }}</span></h6>
             <input type="range" class="form-range custom-range" min="0" max="2000000" step="50000" v-model="maxPrice">
@@ -107,8 +124,8 @@ watch([maxPrice, selectedCats], () => {
           <div class="mb-4">
             <h6 class="fw-bold small mb-3 text-uppercase">Danh mục</h6>
             <div class="form-check mb-2" v-for="cat in categories" :key="cat.id">
-              <input class="form-check-input shadow-none" type="checkbox" :id="'cat'+cat.id" :value="cat.name" v-model="selectedCats">
-              <label class="form-check-label small" :for="'cat'+cat.id">{{ cat.name }}</label>
+              <input class="form-check-input shadow-none" type="checkbox" :id="'cat'+cat.id" :value="cat.ten" v-model="selectedCats">
+              <label class="form-check-label small" :for="'cat'+cat.id">{{ cat.ten }}</label>
             </div>
           </div>
 

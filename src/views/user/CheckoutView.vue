@@ -5,8 +5,8 @@ const paymentMethod = ref('cod');
 const selectedVoucher = ref(null);
 
 const checkoutItems = ref([
-  { id: 1, name: 'Áo Thun Running Bee Pro 1', price: 450000, quantity: 1, image: 'https://via.placeholder.com/60x80' },
-  { id: 2, name: 'Áo Thun Running Bee Pro 2', price: 450000, quantity: 1, image: 'https://via.placeholder.com/60x80' },
+  { id: 1, name: 'Áo Thun Running Bee Pro 1', price: 450000, quantity: 1, image: 'https://placehold.co/60x80' },
+  { id: 2, name: 'Áo Thun Running Bee Pro 2', price: 450000, quantity: 1, image: 'https://placehold.co/60x80' },
 ]);
 
 const vouchers = ref([

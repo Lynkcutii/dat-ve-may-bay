@@ -12,7 +12,7 @@
     <section class="container py-5">
       <div class="row align-items-center g-5">
         <div class="col-lg-6">
-          <img src="https://via.placeholder.com/600x400" class="img-fluid rounded-4 shadow" alt="About BeeSport">
+          <img src="https://placehold.co/600x400" class="img-fluid rounded-4 shadow" alt="About BeeSport">
         </div>
         <div class="col-lg-6">
           <h2 class="fw-bold mb-4">Câu Chuyện Của Chúng Tôi</h2>

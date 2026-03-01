@@ -99,7 +99,7 @@ const orders = ref([
     id: 'BS12341',
     status: 'ĐÃ GIAO',
     items: [
-      { name: 'Áo Thun Running Bee Pro 2024', size: 'XL', color: 'ĐEN', quantity: 1, price: 450000, image: 'https://via.placeholder.com/80x100' }
+      { name: 'Áo Thun Running Bee Pro 2024', size: 'XL', color: 'ĐEN', quantity: 1, price: 450000, image: 'https://placehold.co/80x100' }
     ],
     total: 450000
   },
@@ -107,7 +107,7 @@ const orders = ref([
     id: 'BS12342',
     status: 'ĐÃ GIAO',
     items: [
-      { name: 'Áo Thun Running Bee Pro 2024', size: 'XL', color: 'ĐEN', quantity: 1, price: 450000, image: 'https://via.placeholder.com/80x100' }
+      { name: 'Áo Thun Running Bee Pro 2024', size: 'XL', color: 'ĐEN', quantity: 1, price: 450000, image: 'https://placehold.co/80x100' }
     ],
     total: 450000
   },
@@ -115,7 +115,7 @@ const orders = ref([
     id: 'BS12343',
     status: 'ĐANG GIAO',
     items: [
-      { name: 'Giày Chạy Bộ Bee Speed', size: '42', color: 'TRẮNG', quantity: 1, price: 1250000, image: 'https://via.placeholder.com/80x100' }
+      { name: 'Giày Chạy Bộ Bee Speed', size: '42', color: 'TRẮNG', quantity: 1, price: 1250000, image: 'https://placehold.co/80x100' }
     ],
     total: 1250000
   }

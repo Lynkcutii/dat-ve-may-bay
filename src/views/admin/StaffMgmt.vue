@@ -1,36 +1,49 @@
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router'; // Cần thiết để chuyển trang
+import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import axios from 'axios';
 
 const router = useRouter();
-const selectedStaff = ref(null); // Lưu nhân viên để xem chi tiết
+const selectedStaff = ref(null);
+const staffList = ref([]);
+const loading = ref(true);
+const apiBaseUrl = 'http://localhost:8080/api/admin';
 
-// Dữ liệu mẫu nhân viên đầy đủ để hiện trong Modal
-const staffList = ref([
-  { id: 1, name: 'Lê Quản Lý', role: 'Admin', email: 'admin@beesport.com', status: 'Đang làm việc', phone: '0987.654.321', startDate: '01/01/2023', address: '125A6 Trần Huy Liệu, Ba Đình, Hà Nội' },
-  { id: 2, name: 'Nguyễn Nhân Viên', role: 'Nhân viên bán hàng', email: 'nv1@beesport.com', status: 'Đang làm việc', phone: '0123.456.789', startDate: '15/05/2023', address: 'Quận Cầu Giấy, Hà Nội' },
-  { id: 3, name: 'Trần Kho', role: 'Nhân viên kho', email: 'kho@beesport.com', status: 'Nghỉ phép', phone: '0333.222.111', startDate: '10/02/2023', address: 'Quận Nam Từ Liêm, Hà Nội' },
-]);
-
-const getStatusClass = (status) => {
-  switch (status) {
-    case 'Đang làm việc': return 'bg-success bg-opacity-10 text-success border border-success border-opacity-25';
-    case 'Nghỉ phép': return 'bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25';
-    default: return 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25';
+const fetchStaff = async () => {
+  try {
+    loading.value = true;
+    const res = await axios.get(`${apiBaseUrl}/users/role/2`);
+    staffList.value = res.data;
+  } catch (error) {
+    console.error("Error fetching staff:", error);
+  } finally {
+    loading.value = false;
   }
 };
 
-// Hàm gán nhân viên vào Modal
+onMounted(() => {
+  fetchStaff();
+});
+
+const getStatusClass = (status) => {
+  return status ? 'bg-success bg-opacity-10 text-success border border-success border-opacity-25' : 'bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25';
+};
+
 const showDetail = (staff) => {
   selectedStaff.value = staff;
 };
 
-// Hàm đổi trạng thái
-const toggleStatus = (staff) => {
-  if (staff.status === 'Đang làm việc') {
-    if(confirm(`Ngừng kích hoạt nhân viên ${staff.name}?`)) staff.status = 'Đã nghỉ việc';
-  } else {
-    staff.status = 'Đang làm việc';
+const toggleStatus = async (staff) => {
+  if (confirm(`Thay đổi trạng thái nhân viên ${staff.hoTen}?`)) {
+    try {
+      // For now just toggle in UI or implement a specific API if needed
+      // Here we assume we might need a PUT API to update user
+      // await axios.put(`${apiBaseUrl}/users/${staff.id}/toggle-status`);
+      staff.trangThai = !staff.trangThai;
+      alert("Đã cập nhật trạng thái!");
+    } catch (error) {
+      console.error("Error toggling status:", error);
+    }
   }
 };
 </script>
@@ -45,7 +58,14 @@ const toggleStatus = (staff) => {
         </button>
       </div>
 
-      <div class="table-responsive">
+      <div v-if="loading" class="text-center py-5">
+        <div class="spinner-border text-danger" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2 text-muted">Đang tải nhân viên...</p>
+      </div>
+
+      <div v-else class="table-responsive">
         <table class="table table-hover align-middle">
           <thead class="table-light">
             <tr>
@@ -59,27 +79,24 @@ const toggleStatus = (staff) => {
             <tr v-for="staff in staffList" :key="staff.id">
               <td class="px-3 fw-bold">#{{ staff.id }}</td>
               <td>
-                <div class="fw-bold">{{ staff.name }}</div>
+                <div class="fw-bold">{{ staff.hoTen }}</div>
                 <div class="text-secondary small">{{ staff.email }}</div>
               </td>
               <td class="text-center">
-                <span :class="getStatusClass(staff.status)" class="badge rounded-pill px-3 py-2">
-                  {{ staff.status }}
+                <span :class="getStatusClass(staff.trangThai)" class="badge rounded-pill px-3 py-2">
+                  {{ staff.trangThai ? 'Đang làm việc' : 'Đã nghỉ việc' }}
                 </span>
               </td>
               <td class="text-center">
                 <div class="d-flex justify-content-center gap-2">
-                  <!-- NÚT XEM CHI TIẾT -->
                   <button @click="showDetail(staff)" class="btn-action btn-view" data-bs-toggle="modal" data-bs-target="#staffModal" title="Xem chi tiết">
                     <i class="fas fa-eye"></i>
                   </button>
-                  <!-- NÚT SỬA MỚI -->
-<button @click="router.push('/admin/staff/edit/' + staff.id)" class="btn-action btn-edit-custom" title="Chỉnh sửa">
-  <i class="far fa-edit"></i> 
-</button>
-                  <!-- NÚT KHÓA -->
-                  <button @click="toggleStatus(staff)" class="btn-action" :class="staff.status === 'Đang làm việc' ? 'btn-status-off' : 'btn-status-on'">
-                    <i class="fas" :class="staff.status === 'Đang làm việc' ? 'fa-user-slash' : 'fa-user-check'"></i>
+                  <button @click="router.push('/admin/staff/edit/' + staff.id)" class="btn-action btn-edit-custom" title="Chỉnh sửa">
+                    <i class="far fa-edit"></i> 
+                  </button>
+                  <button @click="toggleStatus(staff)" class="btn-action" :class="staff.trangThai ? 'btn-status-off' : 'btn-status-on'">
+                    <i class="fas" :class="staff.trangThai ? 'fa-user-slash' : 'fa-user-check'"></i>
                   </button>
                 </div>
               </td>
@@ -100,10 +117,10 @@ const toggleStatus = (staff) => {
           <div class="modal-body p-4" v-if="selectedStaff">
             <div class="text-center mb-4">
                 <div class="avatar-lg mx-auto mb-3 bg-danger text-white rounded-circle d-flex align-items-center justify-content-center display-6 fw-bold">
-                    {{ selectedStaff.name.charAt(0) }}
+                    {{ selectedStaff.hoTen?.charAt(0) }}
                 </div>
-                <h4 class="fw-bold mb-1">{{ selectedStaff.name }}</h4>
-                <span class="text-muted small fw-bold">{{ selectedStaff.role }}</span>
+                <h4 class="fw-bold mb-1">{{ selectedStaff.hoTen }}</h4>
+                <span class="text-muted small fw-bold">{{ selectedStaff.vaiTro?.ten }}</span>
             </div>
             
             <div class="row g-3">
@@ -112,20 +129,16 @@ const toggleStatus = (staff) => {
                     <span class="fw-bold">BS-{{ selectedStaff.id }}</span>
                 </div>
                 <div class="col-6">
-                    <label class="small text-muted d-block">Điện thoại</label>
-                    <span class="fw-bold">{{ selectedStaff.phone }}</span>
+                    <label class="small text-muted d-block">Trạng thái</label>
+                    <span class="fw-bold">{{ selectedStaff.trangThai ? 'Đang làm việc' : 'Nghỉ việc' }}</span>
                 </div>
                 <div class="col-12">
                     <label class="small text-muted d-block">Địa chỉ Email</label>
                     <span class="fw-bold">{{ selectedStaff.email }}</span>
                 </div>
                 <div class="col-12">
-                    <label class="small text-muted d-block">Ngày bắt đầu</label>
-                    <span class="fw-bold">{{ selectedStaff.startDate }}</span>
-                </div>
-                <div class="col-12 bg-light p-3 rounded-3 mt-3">
-                    <label class="small text-muted d-block">Địa chỉ thường trú</label>
-                    <span class="small">{{ selectedStaff.address }}</span>
+                    <label class="small text-muted d-block">Ngày gia nhập</label>
+                    <span class="fw-bold">{{ new Date(selectedStaff.ngayTao).toLocaleDateString() }}</span>
                 </div>
             </div>
           </div>

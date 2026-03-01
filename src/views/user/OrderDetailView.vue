@@ -152,7 +152,7 @@ const order = ref({
   id: route.params.id || 'BS12341',
   status: 'ĐÃ GIAO',
   items: [
-    { name: 'Áo Thun Running Bee Pro 2024', size: 'XL', color: 'ĐEN', quantity: 1, price: 450000, image: 'https://via.placeholder.com/80x100' }
+    { name: 'Áo Thun Running Bee Pro 2024', size: 'XL', color: 'ĐEN', quantity: 1, price: 450000, image: 'https://placehold.co/80x100' }
   ],
   total: 450000
 });

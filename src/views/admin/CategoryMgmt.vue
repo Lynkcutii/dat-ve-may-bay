@@ -1,11 +1,26 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
+import axios from 'axios';
 
-const categories = ref([
-  { id: 1, name: 'Giày Bóng Đá', description: 'Các loại giày thi đấu chuyên nghiệp' },
-  { id: 2, name: 'Quần Áo Thể Thao', description: 'Trang phục tập luyện và thi đấu' },
-  { id: 3, name: 'Phụ Kiện', description: 'Tất, găng tay, bóng, bảo vệ ống đồng' },
-]);
+const categories = ref([]);
+const loading = ref(true);
+const apiBaseUrl = 'http://localhost:8080/api/admin';
+
+const fetchCategories = async () => {
+  try {
+    loading.value = true;
+    const res = await axios.get(`${apiBaseUrl}/categories`);
+    categories.value = res.data;
+  } catch (error) {
+    console.error("Error fetching categories:", error);
+  } finally {
+    loading.value = false;
+  }
+};
+
+onMounted(() => {
+  fetchCategories();
+});
 </script>
 
 <template>
@@ -17,7 +32,14 @@ const categories = ref([
       </button>
     </div>
 
-    <div class="card border-0 shadow-sm rounded-3">
+    <div v-if="loading" class="text-center py-5">
+      <div class="spinner-border text-danger" role="status">
+        <span class="visually-hidden">Loading...</span>
+      </div>
+      <p class="mt-2 text-muted">Đang tải danh mục...</p>
+    </div>
+
+    <div v-else class="card border-0 shadow-sm rounded-3">
       <div class="card-body p-0">
         <div class="table-responsive">
           <table class="table table-hover align-middle mb-0">
@@ -25,15 +47,19 @@ const categories = ref([
               <tr>
                 <th class="ps-4">ID</th>
                 <th>Tên Danh Mục</th>
-                <th>Mô Tả</th>
+                <th>Trạng thái</th>
                 <th class="text-end pe-4">Thao tác</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="category in categories" :key="category.id">
                 <td class="ps-4">#{{ category.id }}</td>
-                <td class="fw-bold">{{ category.name }}</td>
-                <td class="text-secondary small">{{ category.description }}</td>
+                <td class="fw-bold">{{ category.ten }}</td>
+                <td>
+                  <span :class="category.trangThai ? 'badge bg-success' : 'badge bg-secondary'">
+                    {{ category.trangThai ? 'Hoạt động' : 'Ngừng hoạt động' }}
+                  </span>
+                </td>
                 <td class="text-end pe-4">
                   <button class="btn btn-sm btn-outline-primary me-2"><i class="fas fa-edit"></i></button>
                   <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
