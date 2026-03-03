@@ -37,7 +37,7 @@ onMounted(() => {
 });
 
 // --- BIẾN LỌC ---
-const maxPrice = ref(2000000);
+const maxPrice = ref(5000000);
 const selectedCats = ref([]);
 const currentPage = ref(1);
 const itemsPerPage = 8;
@@ -49,7 +49,7 @@ const formatPrice = (value) => {
 };
 
 const resetFilter = () => {
-  maxPrice.value = 2000000;
+  maxPrice.value = 5000000;
   selectedCats.value = [];
   currentPage.value = 1;
 };
@@ -113,10 +113,10 @@ watch([maxPrice, selectedCats], () => {
           <!-- Lọc theo Giá -->
           <div class="mb-4">
             <h6 class="fw-bold small mb-3 text-uppercase">Giá tối đa: <span class="text-danger">{{ formatPrice(maxPrice) }}</span></h6>
-            <input type="range" class="form-range custom-range" min="0" max="2000000" step="50000" v-model="maxPrice">
+            <input type="range" class="form-range custom-range" min="0" max="10000000" step="100000" v-model="maxPrice">
             <div class="d-flex justify-content-between small text-secondary mt-2">
               <span>0đ</span>
-              <span>2.000.000đ</span>
+              <span>10.000.000đ</span>
             </div>
           </div>
 

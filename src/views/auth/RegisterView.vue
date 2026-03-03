@@ -1,18 +1,37 @@
 <script setup>
 import { ref } from 'vue';
+import { useAuthStore } from '@/stores/auth';
+import { useRouter } from 'vue-router';
 
-const username = ref('');
+const authStore = useAuthStore();
+const router = useRouter();
+
+const hoTen = ref('');
 const email = ref('');
-const password = ref('');
+const soDienThoai = ref('');
+const matKhau = ref('');
 const confirmPassword = ref('');
+const error = ref('');
 
-const handleRegister = () => {
-  if (password.value !== confirmPassword.value) {
-    alert("Mật khẩu xác nhận không khớp!");
+const handleRegister = async () => {
+  if (matKhau.value !== confirmPassword.value) {
+    error.value = "Mật khẩu xác nhận không khớp!";
     return;
   }
-  console.log("Đăng ký với:", username.value, email.value, password.value);
-  alert("Hệ thống đang xử lý đăng ký cho: " + username.value);
+  
+  error.value = '';
+  try {
+    await authStore.register({
+      hoTen: hoTen.value,
+      email: email.value,
+      soDienThoai: soDienThoai.value,
+      matKhau: matKhau.value
+    });
+    alert("Đăng ký thành công! Vui lòng đăng nhập.");
+    router.push('/login');
+  } catch (err) {
+    error.value = typeof err === 'string' ? err : 'Đăng ký thất bại. Vui lòng thử lại!';
+  }
 };
 </script>
 
@@ -29,16 +48,20 @@ const handleRegister = () => {
                 <p class="text-secondary small">Tham gia cộng đồng BeeSport ngay hôm nay!</p>
               </div>
 
+              <div v-if="error" class="alert alert-danger mb-4 py-2 small border-0 rounded-3">
+                <i class="fas fa-exclamation-circle me-2"></i> {{ error }}
+              </div>
+
               <form @submit.prevent="handleRegister">
                 <div class="mb-3">
-                  <label class="form-label small fw-bold text-uppercase">Tên tài khoản</label>
+                  <label class="form-label small fw-bold text-uppercase">Họ và tên</label>
                   <div class="input-group custom-input-group">
                     <span class="input-group-text bg-light border-0"><i class="far fa-user"></i></span>
                     <input 
                       type="text" 
-                      v-model="username"
+                      v-model="hoTen"
                       class="form-control bg-light border-0 shadow-none" 
-                      placeholder="Nhập tên tài khoản..."
+                      placeholder="Nhập họ và tên..."
                       required
                     >
                   </div>
@@ -59,12 +82,26 @@ const handleRegister = () => {
                 </div>
 
                 <div class="mb-3">
+                  <label class="form-label small fw-bold text-uppercase">Số điện thoại</label>
+                  <div class="input-group custom-input-group">
+                    <span class="input-group-text bg-light border-0"><i class="fas fa-phone"></i></span>
+                    <input 
+                      type="tel" 
+                      v-model="soDienThoai"
+                      class="form-control bg-light border-0 shadow-none" 
+                      placeholder="Nhập số điện thoại..."
+                      required
+                    >
+                  </div>
+                </div>
+
+                <div class="mb-3">
                   <label class="form-label small fw-bold text-uppercase">Mật khẩu</label>
                   <div class="input-group custom-input-group">
                     <span class="input-group-text bg-light border-0"><i class="fas fa-lock"></i></span>
                     <input 
                       type="password" 
-                      v-model="password"
+                      v-model="matKhau"
                       class="form-control bg-light border-0 shadow-none" 
                       placeholder="********"
                       required

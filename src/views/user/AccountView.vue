@@ -1,29 +1,22 @@
 <script setup>
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/auth';
 
+const authStore = useAuthStore();
 const router = useRouter();
 const activeTab = ref('info'); // 'info', 'address'
+const addresses = ref([]); // Restore missing variable
 
-const addresses = ref([
-  {
-    id: 1,
-    name: 'Nguyễn Văn A',
-    phone: '0987 654 321',
-    address: 'Số 123, Đường ABC, Phường XYZ, Quận 1, TP. Hồ Chí Minh',
-    isDefault: true
-  },
-  {
-    id: 2,
-    name: 'Nguyễn Văn A',
-    phone: '0987 654 321',
-    address: 'Ngõ 45, Đường Láng, Phường Láng Thượng, Quận Đống Đa, Hà Nội',
-    isDefault: false
-  }
-]);
+const user = authStore.currentUser || {
+  hoTen: '',
+  email: '',
+  soDienThoai: ''
+};
 
 const handleLogout = () => {
   if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+    authStore.logout();
     router.push('/login');
   }
 };
@@ -52,8 +45,8 @@ const setDefaultAddress = (id) => {
             <div class="avatar-placeholder bg-light rounded-circle mx-auto mb-3 d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
               <i class="fas fa-user fs-2 text-secondary"></i>
             </div>
-            <h6 class="fw-bold mb-1">Nguyễn Văn A</h6>
-            <p class="text-secondary small mb-0">nguyenvana@gmail.com</p>
+            <h6 class="fw-bold mb-1">{{ user.hoTen }}</h6>
+            <p class="text-secondary small mb-0">{{ user.email }}</p>
           </div>
           
           <div class="nav flex-column nav-pills small">
@@ -63,7 +56,7 @@ const setDefaultAddress = (id) => {
             >
               <i class="far fa-user me-2"></i> Thông tin tài khoản
             </button>
-            <router-link to="/orders" class="nav-link text-dark text-start rounded-3 mb-2 px-3 py-2 fw-bold">
+            <router-link to="/order-history" class="nav-link text-dark text-start rounded-3 mb-2 px-3 py-2 fw-bold">
               <i class="fas fa-history me-2"></i> Lịch sử đơn hàng
             </router-link>
             <button 
@@ -87,18 +80,18 @@ const setDefaultAddress = (id) => {
           <div v-if="activeTab === 'info'">
             <h4 class="fw-bold mb-4">Thông Tin Tài Khoản</h4>
             
-            <form class="row g-4">
+            <form class="row g-4" @submit.prevent>
               <div class="col-md-6">
                 <label class="form-label small fw-bold text-secondary text-uppercase">Họ và tên</label>
-                <input type="text" class="form-control border-0 bg-light rounded-3 px-3 py-2" value="Nguyễn Văn A">
+                <input type="text" class="form-control border-0 bg-light rounded-3 px-3 py-2" :value="user.hoTen">
               </div>
               <div class="col-md-6">
                 <label class="form-label small fw-bold text-secondary text-uppercase">Số điện thoại</label>
-                <input type="tel" class="form-control border-0 bg-light rounded-3 px-3 py-2" value="0987654321">
+                <input type="tel" class="form-control border-0 bg-light rounded-3 px-3 py-2" :value="user.soDienThoai">
               </div>
               <div class="col-md-12">
                 <label class="form-label small fw-bold text-secondary text-uppercase">Email</label>
-                <input type="email" class="form-control border-0 bg-light rounded-3 px-3 py-2" value="nguyenvana@gmail.com" disabled>
+                <input type="email" class="form-control border-0 bg-light rounded-3 px-3 py-2" :value="user.email" disabled>
               </div>
               <div class="col-md-12 mt-5">
                 <button type="submit" class="btn btn-dark rounded-pill px-5 py-2 fw-bold shadow-sm">LƯU THAY ĐỔI</button>
@@ -185,19 +178,5 @@ const setDefaultAddress = (id) => {
 .address-item:hover {
   border-color: #000 !important;
   box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-}
-</style>
-
-<style scoped>
-.nav-pills .nav-link.active {
-  background-color: #000;
-  color: #fff !important;
-}
-.nav-link:hover:not(.active) {
-  background-color: #f8f9fa;
-}
-.form-control:focus {
-  background-color: #eee;
-  box-shadow: none;
 }
 </style>

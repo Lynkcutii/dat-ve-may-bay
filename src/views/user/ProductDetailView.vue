@@ -1,10 +1,11 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 import { useCartStore } from '@/stores/cart';
 
 const route = useRoute();
+const router = useRouter();
 const cartStore = useCartStore();
 const apiBaseUrl = 'http://localhost:8080/api/user';
 
@@ -42,8 +43,15 @@ onMounted(() => {
 });
 
 const colors = computed(() => {
-  const allColors = variants.value.map(v => v.mauSac.ten);
-  return [...new Set(allColors)];
+  const uniqueColors = [];
+  const seen = new Set();
+  variants.value.forEach(v => {
+    if (v.mauSac && !seen.has(v.mauSac.id)) {
+      seen.add(v.mauSac.id);
+      uniqueColors.push(v.mauSac);
+    }
+  });
+  return uniqueColors;
 });
 
 const sizes = computed(() => {
@@ -57,20 +65,61 @@ const selectedVariant = computed(() => {
   return variants.value.find(v => v.mauSac.ten === selectedColor.value && v.kichThuoc.ten === selectedSize.value);
 });
 
+const isOutOfStock = computed(() => {
+  return selectedVariant.value && selectedVariant.value.soLuong <= 0;
+});
+
+const isColorOutOfStock = (colorName) => {
+  const colorVariants = variants.value.filter(v => v.mauSac.ten === colorName);
+  return colorVariants.every(v => v.soLuong <= 0);
+};
+
+const isSizeOutOfStock = (sizeName) => {
+  const variant = variants.value.find(v => v.mauSac.ten === selectedColor.value && v.kichThuoc.ten === sizeName);
+  return variant ? variant.soLuong <= 0 : true;
+};
+
 const formatPrice = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
 };
 
+const getColorCode = (colorName) => {
+  const colorMap = {
+    'Đen': '#000000',
+    'Trắng': '#FFFFFF',
+    'Đỏ': '#FF0000',
+    'Xanh dương': '#0000FF',
+    'Xanh lá': '#00FF00',
+    'Vàng': '#FFFF00',
+    'Hồng': '#FFC0CB',
+    'Xám': '#808080',
+    'Cam': '#FFA500'
+  };
+  return colorMap[colorName] || '#CCCCCC';
+};
+
 const handleAddToCart = async () => {
+  if (!cartStore.userId) {
+    alert("Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng!");
+    router.push('/login');
+    return;
+  }
+  
   if (!selectedVariant.value) {
     alert("Vui lòng chọn màu sắc và kích thước!");
     return;
   }
+
+  // Debug thử xem ID và số lượng có chuẩn không
+  console.log("Adding to cart - ID:", selectedVariant.value.id, "Qty:", quantity.value);
+
   try {
     await cartStore.addToCart(selectedVariant.value.id, quantity.value);
     alert("Đã thêm vào giỏ hàng!");
   } catch (error) {
-    alert("Có lỗi xảy ra khi thêm vào giỏ hàng.");
+    // In lỗi chi tiết ra console để xem BE trả về gì
+    console.error("Chi tiết lỗi:", error.response?.data);
+    alert("Lỗi từ hệ thống: " + (error.response?.data?.message || "Có lỗi xảy ra"));
   }
 };
 
@@ -129,23 +178,25 @@ const decrementQty = () => {
             <span class="text-secondary small">(12 đánh giá)</span>
           </div>
 
-          <h3 class="text-danger fw-bold mb-4 fs-2">{{ formatPrice(product.giaGoc) }}</h3>
+          <h3 class="text-danger fw-bold mb-4 fs-2">
+            {{ selectedVariant ? formatPrice(selectedVariant.giaBan) : formatPrice(product.giaGoc) }}
+          </h3>
           
           <p class="text-secondary mb-5 small lh-lg">
             {{ product.moTa }}
           </p>
 
-          <!-- Selectors -->
           <div class="mb-4">
             <h6 class="fw-bold small mb-3 text-uppercase">Màu sắc: <span class="text-secondary fw-normal">{{ selectedColor }}</span></h6>
             <div class="d-flex gap-2">
               <div 
                 v-for="color in colors" 
-                :key="color" 
+                :key="color.id" 
                 class="color-swatch" 
-                :style="{ backgroundColor: color.toLowerCase() === 'đen' ? '#000' : (color.toLowerCase() === 'trắng' ? '#fff' : '#ddd') }"
-                :class="{ active: selectedColor === color }"
-                @click="selectedColor = color"
+                :style="{ backgroundColor: color.ma.startsWith('#') ? color.ma : getColorCode(color.ten) }"
+                :class="{ active: selectedColor === color.ten, 'out-of-stock': isColorOutOfStock(color.ten) }"
+                @click="selectedColor = color.ten"
+                :title="color.ten + (isColorOutOfStock(color.ten) ? ' (Hết hàng)' : '')"
               ></div>
             </div>
           </div>
@@ -157,24 +208,27 @@ const decrementQty = () => {
                 v-for="size in sizes" 
                 :key="size" 
                 class="size-box"
-                :class="{ active: selectedSize === size }"
+                :class="{ active: selectedSize === size, 'out-of-stock': isSizeOutOfStock(size) }"
                 @click="selectedSize = size"
               >{{ size }}</div>
             </div>
+            <p v-if="selectedVariant" class="mt-3 small mb-0" :class="isOutOfStock ? 'text-danger fw-bold' : 'text-secondary'">
+              {{ isOutOfStock ? 'Hết hàng' : 'Còn lại: ' + selectedVariant.soLuong }}
+            </p>
           </div>
 
           <!-- Actions -->
           <div class="row g-3 mb-5">
             <div class="col-4">
               <div class="qty-container d-flex align-items-center justify-content-between border rounded-pill px-3 py-2">
-                <button @click="decrementQty" class="btn btn-link text-dark p-0 shadow-none"><i class="fas fa-minus small"></i></button>
-                <span class="fw-bold">{{ quantity }}</span>
-                <button @click="incrementQty" class="btn btn-link text-dark p-0 shadow-none"><i class="fas fa-plus small"></i></button>
+                <button @click="decrementQty" class="btn btn-link text-dark p-0 shadow-none" :disabled="isOutOfStock"><i class="fas fa-minus small"></i></button>
+                <span class="fw-bold">{{ isOutOfStock ? 0 : quantity }}</span>
+                <button @click="incrementQty" class="btn btn-link text-dark p-0 shadow-none" :disabled="isOutOfStock || (selectedVariant && quantity >= selectedVariant.soLuong)"><i class="fas fa-plus small"></i></button>
               </div>
             </div>
             <div class="col-8">
-              <button @click="handleAddToCart" class="btn btn-dark w-100 rounded-pill py-2 fw-bold shadow-sm">
-                <i class="fas fa-shopping-cart me-2"></i> THÊM VÀO GIỎ HÀNG
+              <button @click="handleAddToCart" class="btn btn-dark w-100 rounded-pill py-2 fw-bold shadow-sm" :disabled="isOutOfStock">
+                <i class="fas fa-shopping-cart me-2"></i> {{ isOutOfStock ? 'HẾT HÀNG' : 'THÊM VÀO GIỎ HÀNG' }}
               </button>
             </div>
           </div>
@@ -214,6 +268,20 @@ const decrementQty = () => {
 .color-swatch.active {
   box-shadow: 0 0 0 2px #000;
 }
+.color-swatch.out-of-stock {
+  opacity: 0.3;
+  position: relative;
+}
+.color-swatch.out-of-stock::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 1px;
+  background: #000;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
 .size-box {
   width: 45px;
   height: 45px;
@@ -231,6 +299,13 @@ const decrementQty = () => {
   background-color: #000;
   color: #fff;
   border-color: #000;
+}
+.size-box.out-of-stock {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background-color: #f8f9fa;
+  color: #adb5bd;
+  text-decoration: line-through;
 }
 .main-img-container {
   aspect-ratio: 4/5;

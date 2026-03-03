@@ -1,8 +1,10 @@
 <script setup>
-import { onMounted } from 'vue';
+import { onMounted, computed } from 'vue';
 import { useCartStore } from '@/stores/cart';
+import { useRouter } from 'vue-router';
 
 const cartStore = useCartStore();
+const router = useRouter();
 
 onMounted(() => {
   cartStore.fetchCart();
@@ -18,6 +20,22 @@ const handleUpdateQuantity = async (spctId, delta) => {
   } catch (error) {
     alert("Có lỗi xảy ra khi cập nhật số lượng.");
   }
+};
+
+const isAllSelected = computed(() => {
+  return cartStore.items.length > 0 && cartStore.selectedItemIds.length === cartStore.items.length;
+});
+
+const handleToggleAll = (event) => {
+  cartStore.toggleAll(event.target.checked);
+};
+
+const handleCheckout = () => {
+  if (cartStore.selectedItemIds.length === 0) {
+    alert("Vui lòng chọn ít nhất một sản phẩm để thanh toán.");
+    return;
+  }
+  router.push('/checkout');
 };
 </script>
 
@@ -42,6 +60,11 @@ const handleUpdateQuantity = async (spctId, delta) => {
           <table class="table align-middle mb-0 cart-table">
             <thead class="text-secondary small d-none d-md-table-header-group">
               <tr>
+                <th>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" :checked="isAllSelected" @change="handleToggleAll">
+                  </div>
+                </th>
                 <th>SẢN PHẨM</th>
                 <th>GIÁ</th>
                 <th class="text-center">SỐ LƯỢNG</th>
@@ -51,6 +74,11 @@ const handleUpdateQuantity = async (spctId, delta) => {
             </thead>
             <tbody>
               <tr v-for="item in cartStore.items" :key="item.id" class="cart-item">
+                <td>
+                  <div class="form-check">
+                    <input class="form-check-input" type="checkbox" :checked="cartStore.selectedItemIds.includes(item.id)" @change="cartStore.toggleSelection(item.id)">
+                  </div>
+                </td>
                 <td class="product-info-cell">
                   <div class="d-flex align-items-center">
                     <img :src="item.sanPhamChiTiet.sanPham.hinhAnhs?.[0]?.url || 'https://placehold.co/80x100'" class="rounded-3 me-3" alt="Product" style="width: 80px; height: 100px; object-fit: cover;">
@@ -91,8 +119,12 @@ const handleUpdateQuantity = async (spctId, delta) => {
         <div class="bg-white rounded-4 shadow-sm p-4 sticky-top" style="top: 100px;">
           <h5 class="fw-bold mb-4">TỔNG ĐƠN HÀNG</h5>
           <div class="d-flex justify-content-between mb-3 small">
+            <span class="text-secondary">Sản phẩm đã chọn:</span>
+            <span class="fw-bold">{{ cartStore.selectedItemIds.length }}</span>
+          </div>
+          <div class="d-flex justify-content-between mb-3 small">
             <span class="text-secondary">Tạm tính:</span>
-            <span class="fw-bold">{{ formatPrice(cartStore.totalPrice) }}</span>
+            <span class="fw-bold">{{ formatPrice(cartStore.selectedTotalPrice) }}</span>
           </div>
           <div class="d-flex justify-content-between mb-3 small">
             <span class="text-secondary">Phí vận chuyển:</span>
@@ -101,9 +133,9 @@ const handleUpdateQuantity = async (spctId, delta) => {
           <hr>
           <div class="d-flex justify-content-between mb-4">
             <span class="fw-bold text-uppercase">Tổng cộng:</span>
-            <span class="fw-bold text-danger fs-5">{{ formatPrice(cartStore.totalPrice) }}</span>
+            <span class="fw-bold text-danger fs-5">{{ formatPrice(cartStore.selectedTotalPrice) }}</span>
           </div>
-          <router-link to="/checkout" class="btn btn-dark w-100 rounded-pill py-3 fw-bold mb-3 shadow text-decoration-none d-block text-center">THANH TOÁN NGAY</router-link>
+          <button @click="handleCheckout" class="btn btn-dark w-100 rounded-pill py-3 fw-bold mb-3 shadow text-decoration-none d-block text-center border-0">THANH TOÁN NGAY</button>
           <div class="text-center pt-2">
             <img src="https://img.icons8.com/color/48/000000/visa.png" width="30" class="mx-1 opacity-75">
             <img src="https://img.icons8.com/color/48/000000/mastercard.png" width="30" class="mx-1 opacity-75">

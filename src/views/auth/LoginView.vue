@@ -1,12 +1,27 @@
 <script setup>
 import { ref } from 'vue';
+import { useAuthStore } from '@/stores/auth';
+import { useRouter } from 'vue-router';
 
-const username = ref('');
+const authStore = useAuthStore();
+const router = useRouter();
+
+const identifier = ref('');
 const password = ref('');
+const error = ref('');
 
-const handleLogin = () => {
-  console.log("Đăng nhập với:", username.value, password.value);
-  alert("Hệ thống đang xử lý đăng nhập cho: " + username.value);
+const handleLogin = async () => {
+  error.value = '';
+  try {
+    const user = await authStore.login(identifier.value, password.value);
+    if (user.vaiTro?.ma === 'ADMIN' || user.vaiTro?.ma === 'STAFF') {
+      router.push('/admin');
+    } else {
+      router.push('/');
+    }
+  } catch (err) {
+    error.value = typeof err === 'string' ? err : 'Đăng nhập thất bại. Vui lòng kiểm tra lại!';
+  }
 };
 </script>
 
@@ -26,6 +41,10 @@ const handleLogin = () => {
                 <p class="text-secondary small">Chào mừng bạn đến với BeeSport!</p>
               </div>
 
+              <div v-if="error" class="alert alert-danger mb-4 py-2 small border-0 rounded-3">
+                <i class="fas fa-exclamation-circle me-2"></i> {{ error }}
+              </div>
+
               <form @submit.prevent="handleLogin">
                 <!-- Nhập Tài khoản -->
                 <div class="mb-4">
@@ -34,9 +53,9 @@ const handleLogin = () => {
                     <span class="input-group-text bg-light border-0"><i class="far fa-user"></i></span>
                     <input 
                       type="text" 
-                      v-model="username"
+                      v-model="identifier"
                       class="form-control bg-light border-0 shadow-none" 
-                      placeholder="Nhập tài khoản..."
+                      placeholder="Email hoặc số điện thoại..."
                       required
                     >
                   </div>

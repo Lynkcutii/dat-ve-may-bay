@@ -1,11 +1,34 @@
 <script setup>
 import { ref } from 'vue';
+import { useAuthStore } from '@/stores/auth';
+import { useRouter } from 'vue-router';
+
+const authStore = useAuthStore();
+const router = useRouter();
 
 const email = ref('');
+const newPassword = ref('');
+const confirmPassword = ref('');
+const error = ref('');
+const loading = ref(false);
 
-const handleForgotPassword = () => {
-  console.log("Yêu cầu khôi phục mật khẩu cho:", email.value);
-  alert("Link khôi phục mật khẩu đã được gửi đến email: " + email.value);
+const handleForgotPassword = async () => {
+  if (newPassword.value !== confirmPassword.value) {
+    error.value = "Mật khẩu xác nhận không khớp!";
+    return;
+  }
+
+  error.value = '';
+  loading.value = true;
+  try {
+    await authStore.forgotPassword(email.value, newPassword.value);
+    alert("Đổi mật khẩu thành công!");
+    router.push('/login');
+  } catch (err) {
+    error.value = typeof err === 'string' ? err : 'Có lỗi xảy ra, vui lòng thử lại!';
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 
@@ -18,13 +41,17 @@ const handleForgotPassword = () => {
             <div class="card-body p-4 p-sm-5">
               <div class="text-center mb-4">
                 <img src="/src/img/logo1.jpg" alt="BeeSport" class="img-fluid mb-3" style="max-height: 70px;">
-                <h3 class="fw-bold text-dark">QUÊN MẬT KHẨU</h3>
-                <p class="text-secondary small">Nhập email của bạn để nhận link khôi phục mật khẩu.</p>
+                <h3 class="fw-bold text-dark">ĐỔI MẬT KHẨU</h3>
+                <p class="text-secondary small">Nhập email và mật khẩu mới của bạn.</p>
+              </div>
+
+              <div v-if="error" class="alert alert-danger mb-4 py-2 small border-0 rounded-3">
+                <i class="fas fa-exclamation-circle me-2"></i> {{ error }}
               </div>
 
               <form @submit.prevent="handleForgotPassword">
-                <div class="mb-4">
-                  <label class="form-label small fw-bold text-uppercase">Email của bạn</label>
+                <div class="mb-3">
+                  <label class="form-label small fw-bold text-uppercase">Email</label>
                   <div class="input-group custom-input-group">
                     <span class="input-group-text bg-light border-0"><i class="far fa-envelope"></i></span>
                     <input 
@@ -37,8 +64,36 @@ const handleForgotPassword = () => {
                   </div>
                 </div>
 
-                <button type="submit" class="btn btn-danger w-100 py-2 fw-bold rounded-pill shadow-sm mb-4">
-                  GỬI YÊU CẦU
+                <div class="mb-3">
+                  <label class="form-label small fw-bold text-uppercase">Mật khẩu mới</label>
+                  <div class="input-group custom-input-group">
+                    <span class="input-group-text bg-light border-0"><i class="fas fa-lock"></i></span>
+                    <input 
+                      type="password" 
+                      v-model="newPassword"
+                      class="form-control bg-light border-0 shadow-none" 
+                      placeholder="********"
+                      required
+                    >
+                  </div>
+                </div>
+
+                <div class="mb-4">
+                  <label class="form-label small fw-bold text-uppercase">Xác nhận mật khẩu</label>
+                  <div class="input-group custom-input-group">
+                    <span class="input-group-text bg-light border-0"><i class="fas fa-check-double"></i></span>
+                    <input 
+                      type="password" 
+                      v-model="confirmPassword"
+                      class="form-control bg-light border-0 shadow-none" 
+                      placeholder="********"
+                      required
+                    >
+                  </div>
+                </div>
+
+                <button type="submit" class="btn btn-danger w-100 py-2 fw-bold rounded-pill shadow-sm mb-4" :disabled="loading">
+                  {{ loading ? 'ĐANG XỬ LÝ...' : 'ĐỔI MẬT KHẨU' }}
                 </button>
               </form>
 

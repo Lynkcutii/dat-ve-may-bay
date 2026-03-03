@@ -1,10 +1,20 @@
 
 <script setup>
 import { ref } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
+const authStore = useAuthStore()
+const router = useRouter()
 const isMobileMenuOpen = ref(false)
+
 const toggleMobileMenu = () => {
   isMobileMenuOpen.value = !isMobileMenuOpen.value
+}
+
+const handleLogout = () => {
+  authStore.logout()
+  router.push('/login')
 }
 </script>
 
@@ -59,7 +69,20 @@ const toggleMobileMenu = () => {
           <i class="fas fa-search"></i>
         </div>
         <div class="icon-group d-flex align-items-center gap-3 gap-lg-4">
-          <router-link to="/account" class="icon-item"><i class="far fa-user"></i></router-link>
+          <div v-if="authStore.isAuthenticated" class="user-dropdown position-relative">
+            <a href="javascript:void(0)" class="icon-item d-flex align-items-center gap-2 text-decoration-none">
+              <i class="far fa-user"></i>
+              <span class="d-none d-md-inline small fw-bold text-white">{{ authStore.currentUser.hoTen }}</span>
+            </a>
+            <ul class="user-submenu shadow-lg">
+              <li><router-link to="/account">Tài khoản</router-link></li>
+              <li v-if="authStore.isAdmin"><router-link to="/admin">Quản trị</router-link></li>
+              <li><router-link to="/order-history">Đơn hàng</router-link></li>
+              <li><a href="javascript:void(0)" @click="handleLogout" class="text-danger">Đăng xuất</a></li>
+            </ul>
+          </div>
+          <router-link v-else to="/login" class="icon-item"><i class="far fa-user"></i></router-link>
+          
           <router-link to="/wishlist" class="icon-item d-none d-sm-block"><i class="far fa-heart"></i></router-link>
           <router-link to="/cart" class="icon-item position-relative">
             <i class="fas fa-shopping-bag"></i>
@@ -277,6 +300,48 @@ const toggleMobileMenu = () => {
 }
 .mobile-menu-content.show {
   left: 0;
+}
+
+/* USER DROPDOWN */
+.user-dropdown {
+  cursor: pointer;
+}
+
+.user-submenu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  transform: translateY(15px);
+  background: #fff;
+  min-width: 160px;
+  list-style: none;
+  padding: 10px 0;
+  border-radius: 8px;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+  z-index: 1000;
+}
+
+.user-dropdown:hover .user-submenu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(5px);
+}
+
+.user-submenu li a {
+  display: block;
+  padding: 8px 20px;
+  color: #444;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  transition: 0.2s;
+}
+
+.user-submenu li a:hover {
+  background: #f8f9fa;
+  color: #dc3545;
 }
 
 /* RESPONSIVE */

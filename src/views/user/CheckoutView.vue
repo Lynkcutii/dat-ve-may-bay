@@ -1,35 +1,64 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useCartStore } from '@/stores/cart';
+import { useAuthStore } from '@/stores/auth';
+import { useRouter } from 'vue-router';
+import axios from 'axios';
+
+const cartStore = useCartStore();
+const authStore = useAuthStore();
+const router = useRouter();
 
 const paymentMethod = ref('cod');
 const selectedVoucher = ref(null);
+const vouchers = ref([]);
+const loading = ref(false);
 
-const checkoutItems = ref([
-  { id: 1, name: 'Áo Thun Running Bee Pro 1', price: 450000, quantity: 1, image: 'https://placehold.co/60x80' },
-  { id: 2, name: 'Áo Thun Running Bee Pro 2', price: 450000, quantity: 1, image: 'https://placehold.co/60x80' },
-]);
+const orderInfo = ref({
+  tenNguoiNhan: authStore.currentUser?.hoTen || '',
+  soDienThoai: authStore.currentUser?.soDienThoai || '',
+  email: authStore.currentUser?.email || '',
+  tinh: '',
+  huyen: '',
+  xa: '',
+  diaChiChiTiet: '',
+  ghiChu: ''
+});
 
-const vouchers = ref([
-  { id: 1, code: 'BEESPORT10', discount: 10, type: 'percent', minOrder: 500000 },
-  { id: 2, code: 'GIAM50K', discount: 50000, type: 'fixed', minOrder: 300000 },
-  { id: 3, code: 'XUAN2024', discount: 20, type: 'percent', minOrder: 1000000 },
-]);
+onMounted(async () => {
+  if (cartStore.selectedItemIds.length === 0) {
+    router.push('/cart');
+    return;
+  }
+  await fetchVouchers();
+});
+
+const fetchVouchers = async () => {
+  try {
+    const res = await axios.get('http://localhost:8080/api/user/vouchers');
+    vouchers.value = res.data;
+  } catch (error) {
+    console.error("Error fetching vouchers:", error);
+  }
+};
 
 const formatPrice = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
 };
 
-const subTotal = computed(() => {
-  return checkoutItems.value.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-});
+const subTotal = computed(() => cartStore.selectedTotalPrice);
 
 const discountAmount = computed(() => {
-  if (!selectedVoucher.value || subTotal.value < selectedVoucher.value.minOrder) return 0;
+  if (!selectedVoucher.value || subTotal.value < selectedVoucher.value.giaTriToiThieu) return 0;
   
-  if (selectedVoucher.value.type === 'percent') {
-    return (subTotal.value * selectedVoucher.value.discount) / 100;
+  if (selectedVoucher.value.kieuGiamGia === 'PERCENT') {
+    let amount = (subTotal.value * selectedVoucher.value.giaTriGiam) / 100;
+    if (selectedVoucher.value.giaTriGiamToiDa && amount > selectedVoucher.value.giaTriGiamToiDa) {
+      amount = selectedVoucher.value.giaTriGiamToiDa;
+    }
+    return amount;
   } else {
-    return selectedVoucher.value.discount;
+    return selectedVoucher.value.giaTriGiam;
   }
 });
 
@@ -40,15 +69,45 @@ const total = computed(() => {
 });
 
 const selectVoucher = (voucher) => {
-  if (subTotal.value < voucher.minOrder) {
-    alert(`Đơn hàng tối thiểu ${formatPrice(voucher.minOrder)} để áp dụng mã này!`);
+  if (subTotal.value < voucher.giaTriToiThieu) {
+    alert(`Đơn hàng tối thiểu ${formatPrice(voucher.giaTriToiThieu)} để áp dụng mã này!`);
     return;
   }
   selectedVoucher.value = voucher;
 };
 
-const handlePlaceOrder = () => {
-  alert('Đơn hàng của bạn đã được tiếp nhận!');
+const handlePlaceOrder = async () => {
+  // Validation
+  if (!orderInfo.value.tenNguoiNhan || !orderInfo.value.soDienThoai || !orderInfo.value.tinh || !orderInfo.value.huyen || !orderInfo.value.xa || !orderInfo.value.diaChiChiTiet) {
+    alert("Vui lòng điền đầy đủ thông tin giao hàng!");
+    return;
+  }
+
+  loading.value = true;
+  try {
+    const request = {
+      userId: cartStore.userId,
+      cartItemIds: cartStore.selectedItemIds,
+      voucherId: selectedVoucher.value?.id,
+      tenNguoiNhan: orderInfo.value.tenNguoiNhan,
+      soDienThoai: orderInfo.value.soDienThoai,
+      tinh: orderInfo.value.tinh,
+      huyen: orderInfo.value.huyen,
+      xa: orderInfo.value.xa,
+      diaChiChiTiet: orderInfo.value.diaChiChiTiet,
+      ghiChu: orderInfo.value.ghiChu
+    };
+
+    const res = await axios.post('http://localhost:8080/api/user/order/create', request);
+    alert('Đơn hàng của bạn đã được tiếp nhận!');
+    cartStore.selectedItemIds = []; // Clear selected items
+    router.push('/order-history');
+  } catch (error) {
+    console.error("Error placing order:", error);
+    alert("Có lỗi xảy ra khi đặt hàng. Vui lòng thử lại.");
+  } finally {
+    loading.value = false;
+  }
 };
 </script>
 
@@ -65,41 +124,35 @@ const handlePlaceOrder = () => {
           <form class="row g-3">
             <div class="col-md-12">
               <label class="form-label small fw-bold text-uppercase">Họ và tên</label>
-              <input type="text" class="form-control border-0 bg-light rounded-3 px-3 py-2" value="Nguyễn Văn A">
+              <input type="text" v-model="orderInfo.tenNguoiNhan" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Nhập họ tên người nhận">
             </div>
             <div class="col-md-6">
               <label class="form-label small fw-bold text-uppercase">Số điện thoại</label>
-              <input type="tel" class="form-control border-0 bg-light rounded-3 px-3 py-2" value="0987654321">
+              <input type="tel" v-model="orderInfo.soDienThoai" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Nhập số điện thoại">
             </div>
             <div class="col-md-6">
               <label class="form-label small fw-bold text-uppercase">Email</label>
-              <input type="email" class="form-control border-0 bg-light rounded-3 px-3 py-2" value="nguyenvana@gmail.com">
+              <input type="email" v-model="orderInfo.email" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Nhập email">
             </div>
             <div class="col-md-12">
               <label class="form-label small fw-bold text-uppercase">Địa chỉ cụ thể</label>
-              <input type="text" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Số nhà, tên đường...">
+              <input type="text" v-model="orderInfo.diaChiChiTiet" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Số nhà, tên đường...">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-bold text-uppercase">Tỉnh / Thành</label>
-              <select class="form-select border-0 bg-light rounded-3 px-3 py-2">
-                <option selected>Hà Nội</option>
-              </select>
+              <input type="text" v-model="orderInfo.tinh" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Tỉnh/Thành">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-bold text-uppercase">Quận / Huyện</label>
-              <select class="form-select border-0 bg-light rounded-3 px-3 py-2">
-                <option selected>Cầu Giấy</option>
-              </select>
+              <input type="text" v-model="orderInfo.huyen" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Quận/Huyện">
             </div>
             <div class="col-md-4">
               <label class="form-label small fw-bold text-uppercase">Phường / Xã</label>
-              <select class="form-select border-0 bg-light rounded-3 px-3 py-2">
-                <option selected>Dịch Vọng Hậu</option>
-              </select>
+              <input type="text" v-model="orderInfo.xa" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Phường/Xã">
             </div>
             <div class="col-md-12">
               <label class="form-label small fw-bold text-uppercase">Ghi chú (Tùy chọn)</label>
-              <textarea class="form-control border-0 bg-light rounded-3 px-3 py-2" rows="3" placeholder="Lưu ý cho người giao hàng..."></textarea>
+              <textarea v-model="orderInfo.ghiChu" class="form-control border-0 bg-light rounded-3 px-3 py-2" rows="3" placeholder="Lưu ý cho người giao hàng..."></textarea>
             </div>
           </form>
         </div>
@@ -109,22 +162,12 @@ const handlePlaceOrder = () => {
           <h5 class="fw-bold mb-4 border-bottom pb-3"><i class="fas fa-credit-card me-2"></i> PHƯƠNG THỨC THANH TOÁN</h5>
           <div class="payment-methods">
             <div class="form-check payment-option mb-3 p-3 rounded-3 border" :class="{ 'active': paymentMethod === 'cod' }">
-              <input class="form-check-input ms-0 me-3" type="radio" name="payment" id="cod" value="cod" v-model="paymentMethod" checked>
+              <input class="form-check-input ms-0 me-3" type="radio" name="payment" id="cod" value="cod" v-model="paymentMethod">
               <label class="form-check-label d-flex align-items-center w-100" for="cod">
                 <i class="fas fa-money-bill-wave fs-4 text-success me-3"></i>
                 <div>
                   <div class="fw-bold">Thanh toán khi nhận hàng (COD)</div>
                   <div class="small text-secondary">Thanh toán bằng tiền mặt khi nhận hàng</div>
-                </div>
-              </label>
-            </div>
-            <div class="form-check payment-option mb-3 p-3 rounded-3 border" :class="{ 'active': paymentMethod === 'vnpay' }">
-              <input class="form-check-input ms-0 me-3" type="radio" name="payment" id="vnpay" value="vnpay" v-model="paymentMethod">
-              <label class="form-check-label d-flex align-items-center w-100" for="vnpay">
-                <i class="fas fa-university fs-4 text-primary me-3"></i>
-                <div>
-                  <div class="fw-bold">Chuyển khoản Ngân hàng / VNPay</div>
-                  <div class="small text-secondary">Thanh toán qua cổng VNPay hoặc chuyển khoản</div>
                 </div>
               </label>
             </div>
@@ -139,16 +182,16 @@ const handlePlaceOrder = () => {
           
           <!-- Order Items -->
           <div class="order-items mb-4">
-            <div v-for="item in checkoutItems" :key="item.id" class="d-flex align-items-center mb-3">
+            <div v-for="item in cartStore.selectedItems" :key="item.id" class="d-flex align-items-center mb-3">
               <div class="position-relative">
-                <img :src="item.image" class="rounded-3 border" width="60" alt="Product">
-                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary" style="font-size: 10px;">{{ item.quantity }}</span>
+                <img :src="item.sanPhamChiTiet.sanPham.hinhAnhs?.[0]?.url || 'https://placehold.co/60x80'" class="rounded-3 border" width="60" alt="Product">
+                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary" style="font-size: 10px;">{{ item.soLuong }}</span>
               </div>
               <div class="ms-4 flex-grow-1">
-                <h6 class="fw-bold mb-0 small">{{ item.name }}</h6>
-                <p class="text-secondary small mb-0">Phân loại: L, Đen</p>
+                <h6 class="fw-bold mb-0 small">{{ item.sanPhamChiTiet.sanPham.ten }}</h6>
+                <p class="text-secondary small mb-0">SIZE: {{ item.sanPhamChiTiet.kichThuoc.ten }} | MÀU: {{ item.sanPhamChiTiet.mauSac.ten }}</p>
               </div>
-              <div class="fw-bold small">{{ formatPrice(item.price * item.quantity) }}</div>
+              <div class="fw-bold small">{{ formatPrice(item.sanPhamChiTiet.sanPham.giaGoc * item.soLuong) }}</div>
             </div>
           </div>
 
@@ -166,7 +209,7 @@ const handlePlaceOrder = () => {
                   <i class="fas fa-ticket-alt me-2"></i>Chọn voucher áp dụng...
                 </span>
                 <span v-else class="fw-bold small text-danger">
-                  <i class="fas fa-ticket-alt me-2"></i>{{ selectedVoucher.code }} (-{{ selectedVoucher.type === 'percent' ? selectedVoucher.discount + '%' : formatPrice(selectedVoucher.discount) }})
+                  <i class="fas fa-ticket-alt me-2"></i>{{ selectedVoucher.maCode }} (-{{ selectedVoucher.kieuGiamGia === 'PERCENT' ? selectedVoucher.giaTriGiam + '%' : formatPrice(selectedVoucher.giaTriGiam) }})
                 </span>
                 <i class="fas fa-chevron-down small opacity-50"></i>
               </button>
@@ -179,16 +222,16 @@ const handlePlaceOrder = () => {
                     :class="{ 'active bg-danger text-white': selectedVoucher?.id === v.id }"
                   >
                     <div class="d-flex justify-content-between align-items-center">
-                      <span class="fw-bold small">{{ v.code }}</span>
+                      <span class="fw-bold small">{{ v.maCode }}</span>
                       <span 
                         class="badge rounded-pill" 
                         :class="selectedVoucher?.id === v.id ? 'bg-white text-danger' : 'bg-danger-subtle text-danger'"
                         style="font-size: 10px;"
                       >
-                        -{{ v.type === 'percent' ? v.discount + '%' : formatPrice(v.discount) }}
+                        -{{ v.kieuGiamGia === 'PERCENT' ? v.giaTriGiam + '%' : formatPrice(v.giaTriGiam) }}
                       </span>
                     </div>
-                    <div class="small opacity-75" style="font-size: 11px;">Đơn tối thiểu: {{ formatPrice(v.minOrder) }}</div>
+                    <div class="small opacity-75" style="font-size: 11px;">Đơn tối thiểu: {{ formatPrice(v.giaTriToiThieu) }}</div>
                   </a>
                 </li>
                 <li v-if="selectedVoucher">
@@ -222,7 +265,10 @@ const handlePlaceOrder = () => {
             <span class="fw-bold text-danger fs-4">{{ formatPrice(total) }}</span>
           </div>
 
-          <button @click="handlePlaceOrder" class="btn btn-dark w-100 rounded-pill py-3 fw-bold shadow-lg">ĐẶT HÀNG NGAY</button>
+          <button @click="handlePlaceOrder" class="btn btn-dark w-100 rounded-pill py-3 fw-bold shadow-lg" :disabled="loading">
+            <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
+            ĐẶT HÀNG NGAY
+          </button>
           
           <router-link to="/cart" class="btn btn-link text-dark text-decoration-none mt-3 w-100 text-center small fw-bold p-0">
             <i class="fas fa-arrow-left me-2"></i> Quay lại giỏ hàng
