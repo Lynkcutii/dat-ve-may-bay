@@ -54,7 +54,7 @@
           </div>
 
           <!-- Order Progress -->
-          <div class="order-progress mb-5 py-4 border-bottom">
+          <div class="order-progress mb-5 py-4 border-bottom" v-if="order.trangThaiDon !== 'DA_HUY' && order.trangThaiDon !== 'HOAN_TRA'">
             <div class="d-flex justify-content-between position-relative">
               <div class="progress-line position-absolute w-100 top-50 translate-middle-y bg-light" style="height: 2px; z-index: 0;"></div>
               <div class="progress-line-active position-absolute top-50 translate-middle-y bg-success" :style="{ height: '2px', zIndex: 1, width: getProgressWidth(order.trangThaiDon) }"></div>
@@ -64,6 +64,28 @@
                   <i :class="step.icon + ' small'"></i>
                 </div>
                 <span :class="['fw-bold small d-block', isStepCompleted(order.trangThaiDon, step.value) ? 'text-dark' : 'text-secondary']" style="font-size: 10px;">{{ step.label }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cancellation Message -->
+          <div v-if="order.trangThaiDon === 'DA_HUY'" class="alert alert-danger rounded-4 p-4 mb-5 border-0">
+            <div class="d-flex align-items-center">
+              <i class="fas fa-times-circle fs-2 me-3"></i>
+              <div>
+                <h6 class="fw-bold mb-1">Đơn hàng đã bị hủy</h6>
+                <p class="mb-0 small">Đơn hàng này đã bị hủy và không còn hiệu lực.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Return Message -->
+          <div v-if="order.trangThaiDon === 'HOAN_TRA'" class="alert alert-warning rounded-4 p-4 mb-5 border-0">
+            <div class="d-flex align-items-center">
+              <i class="fas fa-undo-alt fs-2 me-3"></i>
+              <div>
+                <h6 class="fw-bold mb-1">Đơn hàng đã được hoàn trả</h6>
+                <p class="mb-0 small">Sản phẩm đã được hoàn trả thành công.</p>
               </div>
             </div>
           </div>
@@ -140,8 +162,9 @@
             </div>
           </div>
 
-          <div class="mt-5 pt-4 border-top text-end" v-if="order.trangThaiDon === 'DA_GIAO'">
-            <button @click="reorder" class="btn btn-dark rounded-pill px-5 py-2 fw-bold small">MUA LẠI ĐƠN HÀNG</button>
+          <div class="mt-5 pt-4 border-top text-end d-flex justify-content-end gap-3">
+            <button v-if="order.trangThaiDon === 'DA_DAT' || order.trangThaiDon === 'CHO_XAC_NHAN'" @click="handleCancelOrder" class="btn btn-outline-danger rounded-pill px-5 py-2 fw-bold small">HỦY ĐƠN HÀNG</button>
+            <button v-if="order.trangThaiDon === 'DA_GIAO'" @click="reorder" class="btn btn-dark rounded-pill px-5 py-2 fw-bold small">MUA LẠI ĐƠN HÀNG</button>
           </div>
         </div>
       </div>
@@ -162,8 +185,9 @@ const orderDetails = ref([]);
 const loading = ref(true);
 
 const steps = [
-  { label: 'Đã đặt', value: 'CHO_XAC_NHAN', icon: 'fas fa-receipt' },
-  { label: 'Xác nhận', value: 'DA_XAC_NHAN', icon: 'fas fa-check-circle' },
+  { label: 'Đã đặt', value: 'DA_DAT', icon: 'fas fa-receipt' },
+  { label: 'Chờ xác nhận', value: 'CHO_XAC_NHAN', icon: 'fas fa-clock' },
+  { label: 'Đã xác nhận', value: 'DA_XAC_NHAN', icon: 'fas fa-check-circle' },
   { label: 'Đang giao', value: 'DANG_GIAO', icon: 'fas fa-truck' },
   { label: 'Đã giao', value: 'DA_GIAO', icon: 'fas fa-box-open' }
 ];
@@ -172,11 +196,10 @@ const fetchOrder = async () => {
   loading.value = true;
   try {
     const res = await axios.get(`http://localhost:8080/api/user/order/${route.params.id}`);
-    order.value = res.data;
-    // Assuming the backend returns details with the order or we fetch separately
-    // If details are nested: orderDetails.value = res.data.hoaDonChiTiets;
-    // For now, let's assume we need to fetch them separately if not provided
-    // If not nested, I might need another endpoint or check the entity
+    if (res.data) {
+      order.value = res.data.bill;
+      orderDetails.value = res.data.items;
+    }
   } catch (error) {
     console.error("Error fetching order:", error);
   } finally {
@@ -184,9 +207,17 @@ const fetchOrder = async () => {
   }
 };
 
-// Assuming details are needed, I'll check HoaDon entity again
-// It didn't have @OneToMany so I might need to fetch separately or add it.
-// Let's assume the backend needs a way to get details.
+const handleCancelOrder = async () => {
+  if (confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) {
+    try {
+      await axios.post(`http://localhost:8080/api/user/order/${order.value.id}/cancel`);
+      alert("Đã hủy đơn hàng thành công");
+      fetchOrder();
+    } catch (error) {
+      alert(error.response?.data || "Hủy đơn hàng thất bại");
+    }
+  }
+};
 
 onMounted(fetchOrder);
 
@@ -196,6 +227,7 @@ const formatPrice = (value) => {
 
 const formatStatus = (status) => {
   const map = {
+    'DA_DAT': 'Đã đặt',
     'CHO_XAC_NHAN': 'Chờ xác nhận',
     'DA_XAC_NHAN': 'Đã xác nhận',
     'DANG_GIAO': 'Đang giao',
@@ -213,15 +245,14 @@ const getStatusClass = (status) => {
 };
 
 const getProgressWidth = (status) => {
-  if (status === 'CHO_XAC_NHAN') return '0%';
-  if (status === 'DA_XAC_NHAN') return '33%';
-  if (status === 'DANG_GIAO') return '66%';
-  if (status === 'DA_GIAO') return '100%';
-  return '0%';
+  const statusOrder = ['DA_DAT', 'CHO_XAC_NHAN', 'DA_XAC_NHAN', 'DANG_GIAO', 'DA_GIAO'];
+  const index = statusOrder.indexOf(status);
+  if (index === -1) return '0%';
+  return (index / (statusOrder.length - 1)) * 100 + '%';
 };
 
 const isStepCompleted = (currentStatus, stepValue) => {
-  const statusOrder = ['CHO_XAC_NHAN', 'DA_XAC_NHAN', 'DANG_GIAO', 'DA_GIAO'];
+  const statusOrder = ['DA_DAT', 'CHO_XAC_NHAN', 'DA_XAC_NHAN', 'DANG_GIAO', 'DA_GIAO'];
   const currentIndex = statusOrder.indexOf(currentStatus);
   const stepIndex = statusOrder.indexOf(stepValue);
   return stepIndex <= currentIndex && currentIndex !== -1;

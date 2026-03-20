@@ -1,12 +1,70 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, computed } from 'vue';
+import axios from 'axios';
+import DateFilter from '@/components/DateFilter.vue';
 
-const promotions = ref([
-  { id: 1, name: 'Siêu Sale Mùa Xuân', discount: 'Giảm 30% toàn bộ giày', start: '2024-01-01', end: '2024-02-01' },
-]);
+const promotions = ref([]);
+const filterData = ref({ day: '', month: '', year: '' });
 
-const confirmDelete = (name) => {
-  if (confirm(`Xóa khuyến mãi "${name}"?`)) alert("Xóa thành công!");
+const filteredPromotions = computed(() => {
+  return promotions.value.filter(p => {
+    if (!p.start) return true;
+    const date = new Date(p.start);
+    const d = date.getDate();
+    const m = date.getMonth() + 1;
+    const y = date.getFullYear();
+
+    if (filterData.value.day && d !== parseInt(filterData.value.day)) return false;
+    if (filterData.value.month && m !== parseInt(filterData.value.month)) return false;
+    if (filterData.value.year && y !== parseInt(filterData.value.year)) return false;
+
+    return true;
+  });
+});
+
+const handleFilter = (data) => {
+  filterData.value = data;
+};
+
+const fetchPromotions = async () => {
+  try {
+    const response = await axios.get('http://localhost:8080/api/admin/promotions');
+    promotions.value = response.data.map(p => ({
+      id: p.id,
+      code: p.maDotGiamGia,
+      name: p.tenDot,
+      type: p.kieuGiamGia,
+      discount: p.giaTriGiam,
+      start: p.ngayBat_dau?.split('T')[0],
+      end: p.ngayKet_thuc?.split('T')[0],
+      status: p.trangThai
+    }));
+  } catch (error) {
+    console.error("Error fetching promotions:", error);
+  }
+};
+
+onMounted(fetchPromotions);
+
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+};
+
+const formatDiscount = (p) => {
+  if (p.type === 'PERCENT') return `${p.discount}%`;
+  return formatCurrency(p.discount);
+};
+
+const confirmDelete = async (id, name) => {
+  if (confirm(`Xóa khuyến mãi "${name}"?`)) {
+    try {
+      await axios.delete(`http://localhost:8080/api/admin/promotions/${id}`);
+      alert("Xóa thành công!");
+      fetchPromotions();
+    } catch (error) {
+      alert("Xóa thất bại!");
+    }
+  }
 };
 </script>
 
@@ -19,6 +77,8 @@ const confirmDelete = (name) => {
       </router-link>
     </div>
 
+    <DateFilter @filter="handleFilter" />
+
     <div class="card border-0 shadow-sm rounded-3">
       <div class="card-body p-0">
         <div class="table-responsive">
@@ -26,23 +86,31 @@ const confirmDelete = (name) => {
             <thead class="bg-light">
               <tr>
                 <th class="ps-4">ID</th>
-                <th>Tên Khuyến Mãi</th>
-                <th>Chi tiết</th>
+                <th>Mã Đợt</th>
+                <th>Tên Đợt</th>
+                <th>Giảm giá</th>
                 <th>Bắt đầu</th>
                 <th>Kết thúc</th>
+                <th>Trạng thái</th>
                 <th class="text-end pe-4">Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="p in promotions" :key="p.id">
+              <tr v-for="p in filteredPromotions" :key="p.id">
                 <td class="ps-4">#{{ p.id }}</td>
+                <td><span class="badge bg-danger fw-bold">{{ p.code }}</span></td>
                 <td class="fw-bold">{{ p.name }}</td>
-                <td>{{ p.discount }}</td>
+                <td>{{ formatDiscount(p) }}</td>
                 <td>{{ p.start }}</td>
                 <td>{{ p.end }}</td>
+                <td>
+                  <span :class="p.status ? 'badge bg-success' : 'badge bg-secondary'">
+                    {{ p.status ? 'Hoạt động' : 'Ngừng' }}
+                  </span>
+                </td>
                 <td class="text-end pe-4">
                   <router-link :to="'/admin/promotions/edit/' + p.id" class="btn btn-sm btn-outline-primary me-2"><i class="fas fa-edit"></i></router-link>
-                  <button @click="confirmDelete(p.name)" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                  <button @click="confirmDelete(p.id, p.name)" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
                 </td>
               </tr>
             </tbody>

@@ -1,13 +1,36 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
+import DateFilter from '@/components/DateFilter.vue';
 
 const router = useRouter();
 const selectedStaff = ref(null);
 const staffList = ref([]);
 const loading = ref(true);
 const apiBaseUrl = 'http://localhost:8080/api/admin';
+
+const filterData = ref({ day: '', month: '', year: '' });
+
+const filteredStaff = computed(() => {
+  return staffList.value.filter(staff => {
+    if (!staff.ngayTao) return true;
+    const date = new Date(staff.ngayTao);
+    const d = date.getDate();
+    const m = date.getMonth() + 1;
+    const y = date.getFullYear();
+
+    if (filterData.value.day && d !== parseInt(filterData.value.day)) return false;
+    if (filterData.value.month && m !== parseInt(filterData.value.month)) return false;
+    if (filterData.value.year && y !== parseInt(filterData.value.year)) return false;
+
+    return true;
+  });
+});
+
+const handleFilter = (data) => {
+  filterData.value = data;
+};
 
 const fetchStaff = async () => {
   try {
@@ -58,6 +81,8 @@ const toggleStatus = async (staff) => {
         </button>
       </div>
 
+      <DateFilter @filter="handleFilter" />
+
       <div v-if="loading" class="text-center py-5">
         <div class="spinner-border text-danger" role="status">
           <span class="visually-hidden">Loading...</span>
@@ -76,7 +101,7 @@ const toggleStatus = async (staff) => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="staff in staffList" :key="staff.id">
+            <tr v-for="staff in filteredStaff" :key="staff.id">
               <td class="px-3 fw-bold">#{{ staff.id }}</td>
               <td>
                 <div class="fw-bold">{{ staff.hoTen }}</div>

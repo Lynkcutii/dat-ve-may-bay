@@ -170,7 +170,7 @@ const decrementQty = () => {
             </ol>
           </nav>
 
-          <h2 class="fw-bold mb-3">{{ product.ten }}</h2>
+          <h2 class="fw-bold mb-3">{{ product.tenSanPham }}</h2>
           <div class="d-flex align-items-center mb-4">
             <div class="text-warning me-2 small">
               <i class="fas fa-star" v-for="i in 5" :key="i"></i>

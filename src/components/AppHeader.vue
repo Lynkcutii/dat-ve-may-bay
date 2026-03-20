@@ -1,12 +1,15 @@
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useCartStore } from '@/stores/cart'
 import { useRouter } from 'vue-router'
 
 const authStore = useAuthStore()
+const cartStore = useCartStore()
 const router = useRouter()
 const isMobileMenuOpen = ref(false)
+const searchQuery = ref('')
 
 const toggleMobileMenu = () => {
   isMobileMenuOpen.value = !isMobileMenuOpen.value
@@ -16,6 +19,20 @@ const handleLogout = () => {
   authStore.logout()
   router.push('/login')
 }
+
+const handleSearch = () => {
+  if (searchQuery.value.trim()) {
+    router.push({ path: '/products', query: { search: searchQuery.value.trim() } })
+    searchQuery.value = ''
+    isMobileMenuOpen.value = false
+  }
+}
+
+onMounted(() => {
+  if (authStore.isAuthenticated) {
+    cartStore.fetchCart()
+  }
+})
 </script>
 
 <template>
@@ -65,8 +82,13 @@ const handleLogout = () => {
       <!-- 3. SEARCH & ICONS (Bên phải) -->
       <div class="header-right d-flex align-items-center gap-2 gap-sm-3">
         <div class="search-box d-none d-xl-flex">
-          <input type="text" placeholder="Tìm kiếm...">
-          <i class="fas fa-search"></i>
+          <input 
+            type="text" 
+            placeholder="Tìm kiếm..." 
+            v-model="searchQuery"
+            @keyup.enter="handleSearch"
+          >
+          <i class="fas fa-search cursor-pointer" @click="handleSearch"></i>
         </div>
         <div class="icon-group d-flex align-items-center gap-3 gap-lg-4">
           <div v-if="authStore.isAuthenticated" class="user-dropdown position-relative">
@@ -86,7 +108,7 @@ const handleLogout = () => {
           <router-link to="/wishlist" class="icon-item d-none d-sm-block"><i class="far fa-heart"></i></router-link>
           <router-link to="/cart" class="icon-item position-relative">
             <i class="fas fa-shopping-bag"></i>
-            <span class="cart-badge">0</span>
+            <span class="cart-badge">{{ cartStore.totalItems }}</span>
           </router-link>
         </div>
       </div>
@@ -131,8 +153,14 @@ const handleLogout = () => {
         
         <div class="mt-5 border-top pt-4">
           <div class="search-box w-100 mb-4">
-            <input type="text" placeholder="Tìm kiếm..." class="w-100">
-            <i class="fas fa-search"></i>
+            <input 
+              type="text" 
+              placeholder="Tìm kiếm..." 
+              class="w-100"
+              v-model="searchQuery"
+              @keyup.enter="handleSearch"
+            >
+            <i class="fas fa-search cursor-pointer" @click="handleSearch"></i>
           </div>
           <div class="d-flex gap-4 fs-4 text-secondary justify-content-center">
             <i class="fab fa-facebook"></i>
@@ -248,7 +276,7 @@ const handleLogout = () => {
   color: #fff;
 }
 .search-box input::placeholder { color: rgba(255,255,255,0.6); }
-.search-box i { color: #fff; }
+.search-box i { color: #fff; cursor: pointer; }
 
 .icon-item {
   color: #fff;

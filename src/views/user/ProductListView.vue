@@ -1,7 +1,9 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue';
+import { useRoute } from 'vue-router';
 import axios from 'axios';
 
+const route = useRoute();
 const apiBaseUrl = 'http://localhost:8080/api/user'; // Update if needed
 
 const categories = ref([]);
@@ -19,8 +21,8 @@ const fetchData = async () => {
     categories.value = catRes.data;
     allProducts.value = prodRes.data.map(p => ({
       id: p.id,
-      name: p.ten,
-      price: p.giaGoc,
+      name: p.tenSanPham,
+      price: p.giaBanMin, // Now using variants' selling price
       category: p.danhMuc ? p.danhMuc.ten : 'Khác',
       isNew: true, // Logic for "new" can be added later
       image: p.hinhAnhs && p.hinhAnhs.length > 0 ? p.hinhAnhs[0].url : 'https://placehold.co/400x400?text=No+Image'
@@ -39,9 +41,15 @@ onMounted(() => {
 // --- BIẾN LỌC ---
 const maxPrice = ref(5000000);
 const selectedCats = ref([]);
+const searchQuery = ref(route.query.search || '');
 const currentPage = ref(1);
 const itemsPerPage = 8;
 const isFilterOpen = ref(false);
+
+// Update search when route query changes
+watch(() => route.query.search, (newSearch) => {
+  searchQuery.value = newSearch || '';
+});
 
 // --- HÀM HỖ TRỢ ---
 const formatPrice = (value) => {
@@ -51,6 +59,7 @@ const formatPrice = (value) => {
 const resetFilter = () => {
   maxPrice.value = 5000000;
   selectedCats.value = [];
+  searchQuery.value = '';
   currentPage.value = 1;
 };
 
@@ -63,7 +72,8 @@ const filteredProducts = computed(() => {
   return allProducts.value.filter(p => {
     const matchPrice = p.price <= maxPrice.value;
     const matchCat = selectedCats.value.length === 0 || selectedCats.value.includes(p.category);
-    return matchPrice && matchCat;
+    const matchSearch = !searchQuery.value || p.name.toLowerCase().includes(searchQuery.value.toLowerCase());
+    return matchPrice && matchCat && matchSearch;
   });
 });
 
@@ -76,7 +86,7 @@ const paginatedProducts = computed(() => {
 });
 
 // Reset về trang 1 khi lọc
-watch([maxPrice, selectedCats], () => {
+watch([maxPrice, selectedCats, searchQuery], () => {
   currentPage.value = 1;
 });
 </script>

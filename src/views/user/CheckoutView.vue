@@ -9,7 +9,8 @@ const cartStore = useCartStore();
 const authStore = useAuthStore();
 const router = useRouter();
 
-const paymentMethod = ref('cod');
+const paymentMethods = ref([]);
+const selectedPaymentMethodId = ref(null);
 const selectedVoucher = ref(null);
 const vouchers = ref([]);
 const loading = ref(false);
@@ -31,7 +32,20 @@ onMounted(async () => {
     return;
   }
   await fetchVouchers();
+  await fetchPaymentMethods();
 });
+
+const fetchPaymentMethods = async () => {
+  try {
+    const res = await axios.get('http://localhost:8080/api/user/payment-methods');
+    paymentMethods.value = res.data;
+    if (paymentMethods.value.length > 0) {
+      selectedPaymentMethodId.value = paymentMethods.value[0].id; // Default to first
+    }
+  } catch (error) {
+    console.error("Error fetching payment methods:", error);
+  }
+};
 
 const fetchVouchers = async () => {
   try {
@@ -62,7 +76,7 @@ const discountAmount = computed(() => {
   }
 });
 
-const shippingFee = ref(0);
+const shippingFee = ref(30000);
 
 const total = computed(() => {
   return Math.max(0, subTotal.value + shippingFee.value - discountAmount.value);
@@ -83,12 +97,33 @@ const handlePlaceOrder = async () => {
     return;
   }
 
+  if (!selectedPaymentMethodId.value) {
+    alert("Vui lòng chọn phương thức thanh toán!");
+    return;
+  }
+
+  if (!cartStore.userId) {
+    alert("Vui lòng đăng nhập để thực hiện đặt hàng!");
+    router.push('/login');
+    return;
+  }
+
   loading.value = true;
-  try {
+ try {
+    // Lọc bỏ các ID bị null/undefined để đảm bảo mảng sạch
+    const cleanItemIds = cartStore.selectedItemIds.filter(id => id !== null && id !== undefined);
+
+    if (cleanItemIds.length === 0) {
+      alert("Danh sách sản phẩm chọn mua không hợp lệ!");
+      loading.value = false;
+      return;
+    }
+
     const request = {
       userId: cartStore.userId,
-      cartItemIds: cartStore.selectedItemIds,
-      voucherId: selectedVoucher.value?.id,
+      cartItemIds: cleanItemIds, // Sử dụng mảng đã lọc sạch
+      voucherId: selectedVoucher.value?.id || null,
+      paymentMethodId: selectedPaymentMethodId.value,
       tenNguoiNhan: orderInfo.value.tenNguoiNhan,
       soDienThoai: orderInfo.value.soDienThoai,
       tinh: orderInfo.value.tinh,
@@ -97,11 +132,18 @@ const handlePlaceOrder = async () => {
       diaChiChiTiet: orderInfo.value.diaChiChiTiet,
       ghiChu: orderInfo.value.ghiChu
     };
+      console.log("Dữ liệu gửi lên BE:", request); 
 
     const res = await axios.post('http://localhost:8080/api/user/order/create', request);
-    alert('Đơn hàng của bạn đã được tiếp nhận!');
-    cartStore.selectedItemIds = []; // Clear selected items
-    router.push('/order-history');
+    const { hoaDon, paymentUrl } = res.data;
+    
+    if (paymentUrl) {
+      window.location.href = paymentUrl;
+    } else {
+      alert('Đặt hàng thành công!');
+      await cartStore.clearSelected();
+      router.push('/order-history');
+    }
   } catch (error) {
     console.error("Error placing order:", error);
     alert("Có lỗi xảy ra khi đặt hàng. Vui lòng thử lại.");
@@ -161,13 +203,15 @@ const handlePlaceOrder = async () => {
         <div class="bg-white rounded-4 shadow-sm p-4">
           <h5 class="fw-bold mb-4 border-bottom pb-3"><i class="fas fa-credit-card me-2"></i> PHƯƠNG THỨC THANH TOÁN</h5>
           <div class="payment-methods">
-            <div class="form-check payment-option mb-3 p-3 rounded-3 border" :class="{ 'active': paymentMethod === 'cod' }">
-              <input class="form-check-input ms-0 me-3" type="radio" name="payment" id="cod" value="cod" v-model="paymentMethod">
-              <label class="form-check-label d-flex align-items-center w-100" for="cod">
-                <i class="fas fa-money-bill-wave fs-4 text-success me-3"></i>
+            <div v-for="pm in paymentMethods" :key="pm.id" class="form-check payment-option mb-3 p-3 rounded-3 border" :class="{ 'active': selectedPaymentMethodId === pm.id }">
+              <input class="form-check-input ms-0 me-3" type="radio" name="payment" :id="'pm-'+pm.id" :value="pm.id" v-model="selectedPaymentMethodId">
+              <label class="form-check-label d-flex align-items-center w-100" :for="'pm-'+pm.id">
+                <i v-if="pm.maPtThanhToan === 'COD'" class="fas fa-money-bill-wave fs-4 text-success me-3"></i>
+                <i v-else-if="pm.maPtThanhToan === 'VNPAY'" class="fas fa-wallet fs-4 text-primary me-3"></i>
+                <i v-else class="fas fa-credit-card fs-4 text-secondary me-3"></i>
                 <div>
-                  <div class="fw-bold">Thanh toán khi nhận hàng (COD)</div>
-                  <div class="small text-secondary">Thanh toán bằng tiền mặt khi nhận hàng</div>
+                  <div class="fw-bold">{{ pm.tenPttt }}</div>
+                  <div class="small text-secondary">{{ pm.maPtThanhToan === 'COD' ? 'Thanh toán bằng tiền mặt khi nhận hàng' : 'Thanh toán trực tuyến qua cổng VNPay' }}</div>
                 </div>
               </label>
             </div>
@@ -182,16 +226,16 @@ const handlePlaceOrder = async () => {
           
           <!-- Order Items -->
           <div class="order-items mb-4">
-            <div v-for="item in cartStore.selectedItems" :key="item.id" class="d-flex align-items-center mb-3">
+            <div v-for="item in cartStore.selectedItems" :key="item.idGhct" class="d-flex align-items-center mb-3">
               <div class="position-relative">
                 <img :src="item.sanPhamChiTiet.sanPham.hinhAnhs?.[0]?.url || 'https://placehold.co/60x80'" class="rounded-3 border" width="60" alt="Product">
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary" style="font-size: 10px;">{{ item.soLuong }}</span>
               </div>
               <div class="ms-4 flex-grow-1">
-                <h6 class="fw-bold mb-0 small">{{ item.sanPhamChiTiet.sanPham.ten }}</h6>
+                <h6 class="fw-bold mb-0 small">{{ item.sanPhamChiTiet.sanPham.tenSanPham }}</h6>
                 <p class="text-secondary small mb-0">SIZE: {{ item.sanPhamChiTiet.kichThuoc.ten }} | MÀU: {{ item.sanPhamChiTiet.mauSac.ten }}</p>
               </div>
-              <div class="fw-bold small">{{ formatPrice(item.sanPhamChiTiet.sanPham.giaGoc * item.soLuong) }}</div>
+              <div class="fw-bold small">{{ formatPrice(item.sanPhamChiTiet.giaBan * item.soLuong) }}</div>
             </div>
           </div>
 

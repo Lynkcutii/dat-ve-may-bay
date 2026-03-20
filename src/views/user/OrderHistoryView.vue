@@ -88,8 +88,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import axios from 'axios';
 import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
@@ -97,11 +97,22 @@ import { useAuthStore } from '@/stores/auth';
 const cartStore = useCartStore();
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 const activeTab = ref('ALL');
 const orders = ref([]);
 const loading = ref(true);
 
 const user = authStore.currentUser || { hoTen: 'Khách' };
+
+onMounted(() => {
+  fetchOrders();
+  if (route.query.payment === 'success') {
+    alert('Thanh toán thành công!');
+    cartStore.selectedItemIds = [];
+  } else if (route.query.payment === 'failed') {
+    alert('Thanh toán thất bại hoặc đã bị hủy.');
+  }
+});
 
 const handleLogout = () => {
   if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
@@ -112,11 +123,13 @@ const handleLogout = () => {
 
 const tabs = [
   { label: 'Tất cả', value: 'ALL' },
+  { label: 'Đã đặt', value: 'DA_DAT' },
   { label: 'Chờ xác nhận', value: 'CHO_XAC_NHAN' },
   { label: 'Đã xác nhận', value: 'DA_XAC_NHAN' },
   { label: 'Đang giao', value: 'DANG_GIAO' },
   { label: 'Đã giao', value: 'DA_GIAO' },
-  { label: 'Đã hủy', value: 'DA_HUY' }
+  { label: 'Đã hủy', value: 'DA_HUY' },
+  { label: 'Hoàn trả', value: 'HOAN_TRA' }
 ];
 
 const fetchOrders = async () => {
@@ -128,15 +141,14 @@ const fetchOrders = async () => {
   loading.value = true;
   try {
     const res = await axios.get(`http://localhost:8080/api/user/orders/${cartStore.userId}`);
-    orders.value = res.data;
+    // Sắp xếp đơn hàng mới nhất lên đầu (dựa vào id hoặc ngayTao)
+    orders.value = res.data.sort((a, b) => b.id - a.id);
   } catch (error) {
     console.error("Error fetching orders:", error);
   } finally {
     loading.value = false;
   }
 };
-
-onMounted(fetchOrders);
 
 const filteredOrders = computed(() => {
   if (activeTab.value === 'ALL') return orders.value;
@@ -154,6 +166,7 @@ const formatDate = (dateStr) => {
 
 const formatStatus = (status) => {
   const map = {
+    'DA_DAT': 'Đã đặt',
     'CHO_XAC_NHAN': 'Chờ xác nhận',
     'DA_XAC_NHAN': 'Đã xác nhận',
     'DANG_GIAO': 'Đang giao',

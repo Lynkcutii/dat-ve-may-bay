@@ -22,6 +22,16 @@ const handleUpdateQuantity = async (spctId, delta) => {
   }
 };
 
+const handleRemoveItem = async (itemId) => {
+  if (confirm("Bạn có chắc chắn muốn xóa sản phẩm này khỏi giỏ hàng?")) {
+    try {
+      await cartStore.removeFromCart(itemId);
+    } catch (error) {
+      alert("Có lỗi xảy ra khi xóa sản phẩm.");
+    }
+  }
+};
+
 const isAllSelected = computed(() => {
   return cartStore.items.length > 0 && cartStore.selectedItemIds.length === cartStore.items.length;
 });
@@ -56,8 +66,15 @@ const handleCheckout = () => {
     <div v-else class="row g-4 g-lg-5">
       <!-- Cart Items -->
       <div class="col-lg-8">
-        <div class="table-responsive-md bg-white rounded-4 shadow-sm p-3 p-md-4">
-          <table class="table align-middle mb-0 cart-table">
+        <div class="bg-white rounded-4 shadow-sm p-3 p-md-4">
+          <div class="d-flex align-items-center mb-3 pb-3 border-bottom d-md-none">
+            <div class="form-check mb-0">
+              <input class="form-check-input" type="checkbox" id="selectAllMobile" :checked="isAllSelected" @change="handleToggleAll">
+              <label class="form-check-label fw-bold small ms-2" for="selectAllMobile">CHỌN TẤT CẢ</label>
+            </div>
+          </div>
+          <div class="table-responsive-md">
+            <table class="table align-middle mb-0 cart-table">
             <thead class="text-secondary small d-none d-md-table-header-group">
               <tr>
                 <th>
@@ -73,26 +90,31 @@ const handleCheckout = () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in cartStore.items" :key="item.id" class="cart-item">
+              <tr v-for="item in cartStore.items" :key="item.idGhct" class="cart-item">
                 <td>
                   <div class="form-check">
-                    <input class="form-check-input" type="checkbox" :checked="cartStore.selectedItemIds.includes(item.id)" @change="cartStore.toggleSelection(item.id)">
+                   <input 
+  type="checkbox" 
+  class="form-check-input shadow-none" 
+  :checked="cartStore.selectedItemIds.includes(item.idGhct)" 
+  @change="cartStore.toggleSelection(item.idGhct)" 
+>
                   </div>
                 </td>
                 <td class="product-info-cell">
                   <div class="d-flex align-items-center">
                     <img :src="item.sanPhamChiTiet.sanPham.hinhAnhs?.[0]?.url || 'https://placehold.co/80x100'" class="rounded-3 me-3" alt="Product" style="width: 80px; height: 100px; object-fit: cover;">
                     <div>
-                      <h6 class="fw-bold mb-1 small text-truncate-1">{{ item.sanPhamChiTiet.sanPham.ten }}</h6>
+                      <h6 class="fw-bold mb-1 small text-truncate-1">{{ item.sanPhamChiTiet.sanPham.tenSanPham }}</h6>
                       <p class="text-secondary mb-0" style="font-size: 11px;">
                         SIZE: {{ item.sanPhamChiTiet.kichThuoc.ten }} | MÀU: {{ item.sanPhamChiTiet.mauSac.ten }}
                       </p>
                       <!-- Mobile only price -->
-                      <div class="d-md-none mt-1 fw-bold text-danger">{{ formatPrice(item.sanPhamChiTiet.sanPham.giaGoc) }}</div>
+                      <div class="d-md-none mt-1 fw-bold text-danger">{{ formatPrice(item.sanPhamChiTiet.giaBan) }}</div>
                     </div>
                   </div>
                 </td>
-                <td class="d-none d-md-table-cell fw-bold small">{{ formatPrice(item.sanPhamChiTiet.sanPham.giaGoc) }}</td>
+                <td class="d-none d-md-table-cell fw-bold small">{{ formatPrice(item.sanPhamChiTiet.giaBan) }}</td>
                 <td class="quantity-cell">
                   <div class="input-group input-group-sm mx-auto mx-md-0" style="width: 100px;">
                     <button @click="handleUpdateQuantity(item.sanPhamChiTiet.id, -1)" class="btn btn-outline-secondary border shadow-none px-2" :disabled="item.soLuong <= 1"><i class="fas fa-minus small"></i></button>
@@ -100,22 +122,23 @@ const handleCheckout = () => {
                     <button @click="handleUpdateQuantity(item.sanPhamChiTiet.id, 1)" class="btn btn-outline-secondary border shadow-none px-2"><i class="fas fa-plus small"></i></button>
                   </div>
                 </td>
-                <td class="d-none d-md-table-cell text-end fw-bold text-danger small">{{ formatPrice(item.sanPhamChiTiet.sanPham.giaGoc * item.soLuong) }}</td>
+                <td class="d-none d-md-table-cell text-end fw-bold text-danger small">{{ formatPrice(item.sanPhamChiTiet.giaBan * item.soLuong) }}</td>
                 <td class="text-end text-md-center">
-                  <button class="btn btn-link text-secondary p-0 shadow-none"><i class="far fa-trash-alt"></i></button>
+                  <button @click="handleRemoveItem(item.idGhct)" class="btn btn-link text-secondary p-0 shadow-none"><i class="far fa-trash-alt"></i></button>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
-        
-        <router-link to="/products" class="btn btn-link text-dark text-decoration-none mt-4 p-0 small fw-bold d-inline-block">
-          <i class="fas fa-arrow-left me-2"></i> TIẾP TỤC MUA SẮM
-        </router-link>
       </div>
+        
+      <router-link to="/products" class="btn btn-link text-dark text-decoration-none mt-4 p-0 small fw-bold d-inline-block">
+        <i class="fas fa-arrow-left me-2"></i> TIẾP TỤC MUA SẮM
+      </router-link>
+    </div>
 
-      <!-- Summary -->
-      <div class="col-lg-4">
+    <!-- Summary -->
+    <div class="col-lg-4">
         <div class="bg-white rounded-4 shadow-sm p-4 sticky-top" style="top: 100px;">
           <h5 class="fw-bold mb-4">TỔNG ĐƠN HÀNG</h5>
           <div class="d-flex justify-content-between mb-3 small">

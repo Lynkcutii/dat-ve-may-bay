@@ -1,8 +1,8 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
+import DateFilter from '@/components/DateFilter.vue';
 
-const startDate = ref('');
-const endDate = ref('');
+const filterData = ref({ day: '', month: '', year: '' });
 
 const stats = ref([
   { label: 'Doanh thu hôm nay', value: '5,000,000 VNĐ', icon: 'fa-coins', color: 'text-primary' },
@@ -16,8 +16,23 @@ const recentRevenue = ref([
   { date: '2024-01-19', orders: 12, revenue: 6000000 },
 ]);
 
-const handleFilter = () => {
-  alert(`Lọc doanh thu từ ${startDate.value} đến ${endDate.value}`);
+const filteredRevenue = computed(() => {
+  return recentRevenue.value.filter(item => {
+    const date = new Date(item.date);
+    const d = date.getDate();
+    const m = date.getMonth() + 1;
+    const y = date.getFullYear();
+
+    if (filterData.value.day && d !== parseInt(filterData.value.day)) return false;
+    if (filterData.value.month && m !== parseInt(filterData.value.month)) return false;
+    if (filterData.value.year && y !== parseInt(filterData.value.year)) return false;
+
+    return true;
+  });
+});
+
+const handleFilter = (data) => {
+  filterData.value = data;
 };
 </script>
 
@@ -25,22 +40,9 @@ const handleFilter = () => {
   <div class="revenue-mgmt">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h4 class="fw-bold mb-0">Báo Cáo Doanh Thu</h4>
-      
-      <!-- Bộ lọc thời gian -->
-      <div class="d-flex gap-2 align-items-center bg-white p-2 rounded-3 shadow-sm">
-        <div class="d-flex align-items-center gap-1">
-          <label class="small text-secondary fw-bold">Từ:</label>
-          <input type="date" v-model="startDate" class="form-control form-control-sm border-0 bg-light">
-        </div>
-        <div class="d-flex align-items-center gap-1">
-          <label class="small text-secondary fw-bold">Đến:</label>
-          <input type="date" v-model="endDate" class="form-control form-control-sm border-0 bg-light">
-        </div>
-        <button @click="handleFilter" class="btn btn-sm btn-danger rounded-pill px-3">
-          <i class="fas fa-filter me-1"></i>Lọc
-        </button>
-      </div>
     </div>
+
+    <DateFilter @filter="handleFilter" />
 
     <div class="row g-4 mb-4">
       <div v-for="stat in stats" :key="stat.label" class="col-md-4">
@@ -74,7 +76,7 @@ const handleFilter = () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="item in recentRevenue" :key="item.date">
+              <tr v-for="item in filteredRevenue" :key="item.date">
                 <td class="ps-4">{{ item.date }}</td>
                 <td>{{ item.orders }}</td>
                 <td class="fw-bold text-danger">{{ item.revenue.toLocaleString() }} VNĐ</td>

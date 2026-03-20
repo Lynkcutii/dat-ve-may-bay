@@ -1,38 +1,66 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
+import axios from 'axios'; // Đảm bảo đã cài axios: npm install axios
 import capyImage from '@/img/capy.jpg';
 
 const isChatOpen = ref(false);
 const chatMessage = ref('');
+const isLoading = ref(false); // Thêm trạng thái loading
 const messages = ref([
   { text: 'Xin chào! Tôi là Bee Bot, tôi có thể giúp gì cho bạn?', sender: 'bot' }
 ]);
 
-const toggleChat = () => {
-  isChatOpen.value = !isChatOpen.value;
-};
+const toggleChat = () => { isChatOpen.value = !isChatOpen.value; };
 
-const sendMessage = () => {
+const sendMessage = async () => {
   if (chatMessage.value.trim() === '') return;
   
-  messages.value.push({ text: chatMessage.value, sender: 'user' });
-  const userMsg = chatMessage.value.toLowerCase();
+  const userText = chatMessage.value;
+  messages.value.push({ text: userText, sender: 'user' });
   chatMessage.value = '';
+  isLoading.value = true;
 
-  // Giả lập bot trả lời thông minh hơn
-  setTimeout(() => {
-    let response = 'Bee Bot đã nhận được tin nhắn của bạn. Đội ngũ hỗ trợ sẽ phản hồi sớm nhất có thể!';
-    
-    if (userMsg.includes('chào') || userMsg.includes('hi') || userMsg.includes('hello')) {
-      response = 'Chào bạn! Chúc bạn một ngày tốt lành. Bee Sport có thể giúp gì cho bạn hôm nay?';
-    } else if (userMsg.includes('giá') || userMsg.includes('bao nhiêu')) {
-      response = 'Bạn có thể xem giá chi tiết của từng sản phẩm trong mục "SẢN PHẨM" nhé!';
-    } else if (userMsg.includes('ship') || userMsg.includes('giao hàng')) {
-      response = 'Bee Sport giao hàng toàn quốc và miễn phí vận chuyển cho đơn hàng từ 500k!';
+  try {
+    // Gọi đến Backend Spring Boot
+    const res = await axios.post('http://localhost:8080/api/chatbot/chat', {
+      message: userText
+    });
+
+    messages.value.push({ text: res.data, sender: 'bot' });
+  } catch (error) {
+    console.error("Lỗi Chatbot:", error);
+    messages.value.push({ 
+      text: 'Bee Bot đang bận một chút, bạn thử lại sau nhé!', 
+      sender: 'bot' 
+    });
+  } finally {
+    isLoading.value = false;
+    // Cuộn xuống cuối tin nhắn
+    await nextTick();
+    const chatContainer = document.querySelector('.chat-messages');
+    if (chatContainer) chatContainer.scrollTop = chatContainer.scrollHeight;
+  }
+};
+
+const parseMessage = (text) => {
+  const parts = [];
+  const regex = /\[PRODUCT:(\d+):([^\]]+)\]/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', content: text.substring(lastIndex, match.index) });
     }
+    parts.push({ type: 'product', id: match[1], name: match[2] });
+    lastIndex = regex.lastIndex;
+  }
 
-    messages.value.push({ text: response, sender: 'bot' });
-  }, 800);
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', content: text.substring(lastIndex) });
+  }
+
+  return parts.length > 0 ? parts : [{ type: 'text', content: text }];
 };
 </script>
 
@@ -68,7 +96,20 @@ const sendMessage = () => {
             <img :src="capyImage" width="24" height="24" class="rounded-circle">
           </div>
           <div class="bubble-content p-2 px-3 rounded-4 shadow-sm small">
-            {{ msg.text }}
+            <div v-for="(part, i) in parseMessage(msg.text)" :key="i">
+              <span v-if="part.type === 'text'">{{ part.content }}</span>
+              <router-link 
+                v-else-if="part.type === 'product'" 
+                :to="'/product/' + part.id" 
+                class="product-card-link d-block mt-2 p-2 bg-light border border-warning rounded shadow-sm text-decoration-none"
+              >
+                <div class="d-flex align-items-center">
+                  <i class="fas fa-shopping-cart text-warning me-2"></i>
+                  <span class="fw-bold text-dark">{{ part.name }}</span>
+                </div>
+                <div class="text-primary small mt-1">Xem chi tiết <i class="fas fa-chevron-right ms-1" style="font-size: 8px;"></i></div>
+              </router-link>
+            </div>
           </div>
         </div>
       </div>

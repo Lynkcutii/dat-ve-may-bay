@@ -1,10 +1,13 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import axios from 'axios';
+import DateFilter from '@/components/DateFilter.vue';
 
 const customers = ref([]);
 const loading = ref(true);
 const apiBaseUrl = 'http://localhost:8080/api/admin';
+
+const filterData = ref({ day: '', month: '', year: '' });
 
 const fetchCustomers = async () => {
   try {
@@ -26,11 +29,31 @@ const searchQuery = ref('');
 const selectedCustomer = ref(null);
 
 const filteredCustomers = computed(() => {
-  return customers.value.filter(c => 
-    c.hoTen?.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-    c.email?.toLowerCase().includes(searchQuery.value.toLowerCase())
-  );
+  return customers.value.filter(c => {
+    const matchesSearch = c.hoTen?.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
+                          c.email?.toLowerCase().includes(searchQuery.value.toLowerCase());
+    
+    if (!matchesSearch) return false;
+
+    if (filterData.value.day || filterData.value.month || filterData.value.year) {
+      if (!c.ngayTao) return false;
+      const date = new Date(c.ngayTao);
+      const d = date.getDate();
+      const m = date.getMonth() + 1;
+      const y = date.getFullYear();
+
+      if (filterData.value.day && d !== parseInt(filterData.value.day)) return false;
+      if (filterData.value.month && m !== parseInt(filterData.value.month)) return false;
+      if (filterData.value.year && y !== parseInt(filterData.value.year)) return false;
+    }
+
+    return true;
+  });
 });
+
+const handleFilter = (data) => {
+  filterData.value = data;
+};
 
 const viewDetails = (customer) => {
   selectedCustomer.value = customer;
@@ -87,6 +110,8 @@ const toggleStatus = async (customer) => {
             <input v-model="searchQuery" type="text" placeholder="Tìm tên hoặc Email...">
           </div>
         </div>
+
+        <DateFilter @filter="handleFilter" />
 
         <div v-if="loading" class="text-center py-5">
           <div class="spinner-border text-danger" role="status">

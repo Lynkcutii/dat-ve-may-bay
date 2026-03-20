@@ -63,6 +63,30 @@ export const useAuthStore = defineStore('auth', {
     logout() {
       this.user = null;
       localStorage.removeItem('user');
+    },
+    async updateProfile(userId, userData) {
+      this.loading = true;
+      try {
+        const response = await axios.put(`http://localhost:8080/api/user/profile/${userId}`, userData);
+        this.user = response.data;
+        localStorage.setItem('user', JSON.stringify(this.user));
+        return this.user;
+      } catch (err) {
+        throw err.response?.data || 'Update failed';
+      } finally {
+        this.loading = false;
+      }
+    },
+    async changePassword(userId, passwords) {
+      this.loading = true;
+      try {
+        const response = await axios.post(`http://localhost:8080/api/user/change-password/${userId}`, passwords);
+        return response.data;
+      } catch (err) {
+        throw err.response?.data || 'Change password failed';
+      } finally {
+        this.loading = false;
+      }
     }
   }
 });

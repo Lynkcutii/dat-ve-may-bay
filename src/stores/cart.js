@@ -16,11 +16,11 @@ export const useCartStore = defineStore('cart', {
       return authStore.currentUser?.id;
     },
     totalItems: (state) => state.items.reduce((acc, item) => acc + item.soLuong, 0),
-    totalPrice: (state) => state.items.reduce((acc, item) => acc + (item.sanPhamChiTiet.sanPham.giaGoc * item.soLuong), 0),
-    selectedItems: (state) => state.items.filter(item => state.selectedItemIds.includes(item.id)),
+    totalPrice: (state) => state.items.reduce((acc, item) => acc + (item.sanPhamChiTiet.giaBan * item.soLuong), 0),
+    selectedItems: (state) => state.items.filter(item => state.selectedItemIds.includes(item.idGhct)),
     selectedTotalPrice: (state) => state.items
-      .filter(item => state.selectedItemIds.includes(item.id))
-      .reduce((acc, item) => acc + (item.sanPhamChiTiet.sanPham.giaGoc * item.soLuong), 0),
+      .filter(item => state.selectedItemIds.includes(item.idGhct))
+      .reduce((acc, item) => acc + (item.sanPhamChiTiet.giaBan * item.soLuong), 0),
   },
   actions: {
     async fetchCart() {
@@ -33,7 +33,7 @@ export const useCartStore = defineStore('cart', {
         const res = await axios.get(`${apiBaseUrl}/cart/${this.userId}`);
         this.items = res.data;
         // Keep selectedItemIds that are still in the cart
-        const cartItemIds = this.items.map(item => item.id);
+        const cartItemIds = this.items.map(item => item.idGhct);
         this.selectedItemIds = this.selectedItemIds.filter(id => cartItemIds.includes(id));
       } catch (error) {
         console.error("Error fetching cart:", error);
@@ -53,20 +53,46 @@ export const useCartStore = defineStore('cart', {
         throw error;
       }
     },
-    toggleSelection(itemId) {
-      const index = this.selectedItemIds.indexOf(itemId);
-      if (index === -1) {
-        this.selectedItemIds.push(itemId);
-      } else {
-        this.selectedItemIds.splice(index, 1);
+    async removeFromCart(ghctId) {
+      if (!this.userId) return;
+      try {
+        await axios.delete(`${apiBaseUrl}/cart/${this.userId}/remove/${ghctId}`);
+        await this.fetchCart();
+      } catch (error) {
+        console.error("Error removing from cart:", error.response?.data || error.message);
+        throw error;
       }
     },
+  // Trong cart.js
+toggleSelection(itemId) {
+  if (itemId === null || itemId === undefined) {
+    console.error("Lỗi: ID sản phẩm bị trống!", itemId);
+    return;
+  }
+  
+  const index = this.selectedItemIds.indexOf(itemId);
+  if (index === -1) {
+    this.selectedItemIds.push(itemId);
+  } else {
+    this.selectedItemIds.splice(index, 1);
+  }
+  
+  // Log ra để kiểm tra danh sách đã chọn
+  console.log("Danh sách ID đã chọn:", this.selectedItemIds);
+},
     toggleAll(selected) {
       if (selected) {
-        this.selectedItemIds = this.items.map(item => item.id);
+        this.selectedItemIds = this.items.map(item => item.idGhct);
       } else {
         this.selectedItemIds = [];
       }
+    },
+    async clearSelected() {
+      // Clear items locally first to provide immediate feedback
+      this.items = this.items.filter(item => !this.selectedItemIds.includes(item.idGhct));
+      this.selectedItemIds = [];
+      // Optionally re-fetch from server to be 100% sure
+      await this.fetchCart();
     }
   }
 });

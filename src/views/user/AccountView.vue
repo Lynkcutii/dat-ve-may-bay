@@ -8,6 +8,47 @@ const router = useRouter();
 const activeTab = ref('info'); // 'info', 'address'
 const addresses = ref([]); // Restore missing variable
 
+const userForm = ref({
+  hoTen: authStore.currentUser?.hoTen || '',
+  soDienThoai: authStore.currentUser?.soDienThoai || '',
+  email: authStore.currentUser?.email || ''
+});
+
+const passwordForm = ref({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+});
+
+const handleUpdateProfile = async () => {
+  try {
+    await authStore.updateProfile(authStore.currentUser.id, {
+      hoTen: userForm.value.hoTen,
+      soDienThoai: userForm.value.soDienThoai
+    });
+    alert('Cập nhật thông tin thành công!');
+  } catch (error) {
+    alert(error);
+  }
+};
+
+const handleChangePassword = async () => {
+  if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
+    alert('Mật khẩu xác nhận không khớp!');
+    return;
+  }
+  try {
+    await authStore.changePassword(authStore.currentUser.id, {
+      oldPassword: passwordForm.value.oldPassword,
+      newPassword: passwordForm.value.newPassword
+    });
+    alert('Đổi mật khẩu thành công!');
+    passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' };
+  } catch (error) {
+    alert(error);
+  }
+};
+
 const user = authStore.currentUser || {
   hoTen: '',
   email: '',
@@ -80,37 +121,45 @@ const setDefaultAddress = (id) => {
           <div v-if="activeTab === 'info'">
             <h4 class="fw-bold mb-4">Thông Tin Tài Khoản</h4>
             
-            <form class="row g-4" @submit.prevent>
+            <form class="row g-4" @submit.prevent="handleUpdateProfile">
               <div class="col-md-6">
                 <label class="form-label small fw-bold text-secondary text-uppercase">Họ và tên</label>
-                <input type="text" class="form-control border-0 bg-light rounded-3 px-3 py-2" :value="user.hoTen">
+                <input type="text" v-model="userForm.hoTen" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Họ và tên">
               </div>
               <div class="col-md-6">
                 <label class="form-label small fw-bold text-secondary text-uppercase">Số điện thoại</label>
-                <input type="tel" class="form-control border-0 bg-light rounded-3 px-3 py-2" :value="user.soDienThoai">
+                <input type="tel" v-model="userForm.soDienThoai" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Số điện thoại">
               </div>
               <div class="col-md-12">
                 <label class="form-label small fw-bold text-secondary text-uppercase">Email</label>
-                <input type="email" class="form-control border-0 bg-light rounded-3 px-3 py-2" :value="user.email" disabled>
+                <input type="email" v-model="userForm.email" class="form-control border-0 bg-light rounded-3 px-3 py-2" disabled>
               </div>
               <div class="col-md-12 mt-5">
-                <button type="submit" class="btn btn-dark rounded-pill px-5 py-2 fw-bold shadow-sm">LƯU THAY ĐỔI</button>
+                <button type="submit" class="btn btn-dark rounded-pill px-5 py-2 fw-bold shadow-sm" :disabled="authStore.loading">
+                  <span v-if="authStore.loading" class="spinner-border spinner-border-sm me-2"></span>
+                  LƯU THAY ĐỔI
+                </button>
               </div>
             </form>
 
             <div class="mt-5 pt-5 border-top">
               <h5 class="fw-bold mb-3">Đổi mật khẩu</h5>
-              <div class="row g-3">
-                <div class="col-md-4">
-                  <input type="password" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Mật khẩu hiện tại">
+              <form class="row g-3" @submit.prevent="handleChangePassword">
+                <div class="col-md-3">
+                  <input type="password" v-model="passwordForm.oldPassword" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Mật khẩu hiện tại" required>
                 </div>
-                <div class="col-md-4">
-                  <input type="password" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Mật khẩu mới">
+                <div class="col-md-3">
+                  <input type="password" v-model="passwordForm.newPassword" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Mật khẩu mới" required>
                 </div>
-                <div class="col-md-4">
-                  <button class="btn btn-outline-dark w-100 rounded-pill py-2 fw-bold small">CẬP NHẬT</button>
+                <div class="col-md-3">
+                  <input type="password" v-model="passwordForm.confirmPassword" class="form-control border-0 bg-light rounded-3 px-3 py-2" placeholder="Xác nhận mật khẩu mới" required>
                 </div>
-              </div>
+                <div class="col-md-3">
+                  <button type="submit" class="btn btn-outline-dark w-100 rounded-pill py-2 fw-bold small" :disabled="authStore.loading">
+                    CẬP NHẬT
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
 

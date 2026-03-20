@@ -21,7 +21,7 @@ const toggleSidebar = () => {
 
       <!-- Sidebar Admin bên trái -->
       <nav 
-        class="col-md-3 col-lg-2 sidebar vh-100 p-3 sticky-top shadow" 
+        class="col-md-3 col-lg-2 sidebar p-3 sticky-top shadow" 
         :class="['admin-sidebar', { 'show-mobile': isSidebarOpen }]"
         style="background-color: #305a78;"
       >

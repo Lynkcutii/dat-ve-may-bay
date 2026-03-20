@@ -1,10 +1,43 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
+import DateFilter from '@/components/DateFilter.vue';
 
 const products = ref([]);
 const loading = ref(true);
 const apiBaseUrl = 'http://localhost:8080/api/admin';
+
+const filterData = ref({ day: '', month: '', year: '' });
+const currentPage = ref(1);
+const itemsPerPage = 10;
+
+const filteredProducts = computed(() => {
+  return products.value.filter(product => {
+    if (!product.ngayTao) return true;
+    const date = new Date(product.ngayTao);
+    const d = date.getDate();
+    const m = date.getMonth() + 1;
+    const y = date.getFullYear();
+
+    if (filterData.value.day && d !== parseInt(filterData.value.day)) return false;
+    if (filterData.value.month && m !== parseInt(filterData.value.month)) return false;
+    if (filterData.value.year && y !== parseInt(filterData.value.year)) return false;
+
+    return true;
+  });
+});
+
+const totalPages = computed(() => Math.ceil(filteredProducts.value.length / itemsPerPage));
+
+const paginatedProducts = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage;
+  return filteredProducts.value.slice(start, start + itemsPerPage);
+});
+
+const handleFilter = (data) => {
+  filterData.value = data;
+  currentPage.value = 1;
+};
 
 const fetchProducts = async () => {
   try {
@@ -22,15 +55,15 @@ onMounted(() => {
   fetchProducts();
 });
 
-const confirmDelete = async (product) => {
-  if (confirm(`Bạn có chắc chắn muốn xóa sản phẩm "${product.ten}"?`)) {
+const toggleStatus = async (product) => {
+  if (confirm(`Bạn có muốn ${product.trangThai ? 'ngừng bán' : 'tiếp tục bán'} sản phẩm "${product.tenSanPham}"?`)) {
     try {
-      await axios.delete(`${apiBaseUrl}/products/${product.id}`);
-      alert("Đã xóa thành công!");
+      await axios.put(`${apiBaseUrl}/products/${product.id}/toggle-status`);
+      alert("Cập nhật trạng thái thành công!");
       fetchProducts();
     } catch (error) {
-      console.error("Error deleting product:", error);
-      alert("Xóa thất bại!");
+      console.error("Error toggling product status:", error);
+      alert("Cập nhật thất bại!");
     }
   }
 };
@@ -44,6 +77,8 @@ const confirmDelete = async (product) => {
         <i class="fas fa-plus me-2"></i>Thêm Sản Phẩm
       </router-link>
     </div>
+
+    <DateFilter @filter="handleFilter" />
 
     <div v-if="loading" class="text-center py-5">
       <div class="spinner-border text-danger" role="status">
@@ -67,9 +102,9 @@ const confirmDelete = async (product) => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="product in products" :key="product.id">
+              <tr v-for="product in filteredProducts" :key="product.id">
                 <td class="ps-4">#{{ product.id }}</td>
-                <td class="fw-bold">{{ product.ten }}</td>
+                <td class="fw-bold">{{ product.tenSanPham }}</td>
                 <td><span class="badge bg-info text-dark opacity-75">{{ product.danhMuc ? product.danhMuc.ten : 'N/A' }}</span></td>
                 <td>{{ product.giaGoc?.toLocaleString() }}</td>
                 <td>
@@ -78,13 +113,13 @@ const confirmDelete = async (product) => {
                   </span>
                 </td>
                 <td class="text-end pe-4">
-                  <router-link :to="'/admin/products/edit/' + product.id" class="btn btn-sm btn-outline-info me-2" title="Xem chi tiết">
+                  <router-link :to="{ path: '/admin/products/edit/' + product.id, query: { mode: 'view' }}" class="btn btn-sm btn-outline-info me-2" title="Xem chi tiết">
                     <i class="fas fa-eye"></i>
                   </router-link>
-                  <router-link :to="'/admin/products/edit/' + product.id" class="btn btn-sm btn-outline-primary me-2">
+                  <router-link :to="'/admin/products/edit/' + product.id" class="btn btn-sm btn-outline-primary me-2" title="Sửa">
                     <i class="fas fa-edit"></i>
                   </router-link>
-                  <button @click="confirmDelete(product)" class="btn btn-sm btn-outline-danger">
+                  <button @click="toggleStatus(product)" class="btn btn-sm btn-outline-danger" title="Đổi trạng thái">
                     <i class="fas fa-trash"></i>
                   </button>
                 </td>
