@@ -9,6 +9,8 @@ let timer;
 const products = ref([]);
 const customers = ref([]);
 const vouchers = ref([]);
+const applicableVouchers = ref([]);
+const selectedVoucher = ref(null);
 const paymentMethods = ref([]);
 const invoices = ref([]);
 const activeInvoiceIndex = ref(0);
@@ -31,9 +33,11 @@ const fetchInitialData = async () => {
     products.value = prodRes.data.map(p => ({
       id: p.id,
       name: p.tenSanPham,
-      price: p.giaGoc,
+      price: p.giaSauGiam || p.giaGoc,
+      originalPrice: p.giaGoc,
+      hasPromotion: (p.giaSauGiam && p.giaSauGiam < p.giaGoc),
       ma: p.ma,
-      img: 'https://via.placeholder.com/50' 
+      img: (p.hinhAnhs && p.hinhAnhs.length > 0) ? p.hinhAnhs[0].url : 'https://via.placeholder.com/50' 
     }));
     
     customers.value = custRes.data.map(c => ({
@@ -55,24 +59,30 @@ const fetchInitialData = async () => {
 
         const cartItems = data.items || [];
         const subTotal = cartItems.reduce((sum, item) => {
+          // Giá đơn hàng chi tiết đã được tính khuyến mãi tại Backend (donGia)
           const price = item.donGia || item.sanPhamChiTiet?.giaBan || 0;
           return sum + (price * item.soLuong);
         }, 0);
 
+        const summary = computeInvoiceSummary({ voucher: null }, cartItems);
         invoices.value.push({
           id: data.bill.id,
-          code: data.bill.ma, 
+          code: data.bill.ma,
           cart: cartItems,
           customer: data.bill.nguoiDung,
-          voucher: null, 
-          subTotal: subTotal,
-          discount: 0,
-          total: subTotal
+          voucher: null,
+          subTotal: summary.subTotal,
+          discount: summary.discount,
+          total: summary.total
         });
       }
     } else {
       // If no waiting invoices, create one by default or show empty screen
       // For now, let's just keep it empty as the template handles empty invoices.length
+    }
+
+    if (invoices.value.length > 0) {
+      await loadApplicableVouchers(invoices.value[activeInvoiceIndex.value]?.id);
     }
   } catch (error) {
     console.error("Error fetching POS data:", error);
@@ -91,6 +101,85 @@ onUnmounted(() => {
 });
 
 const activeInvoice = computed(() => invoices.value[activeInvoiceIndex.value] || null);
+
+const loadApplicableVouchers = async (invoiceId) => {
+  if (!invoiceId) {
+    applicableVouchers.value = [];
+    return;
+  }
+
+  try {
+    const res = await axios.get(`http://localhost:8080/api/admin/pos/invoices/${invoiceId}/applicable-vouchers`);
+    applicableVouchers.value = res.data || [];
+    if (!selectedVoucher.value || !applicableVouchers.value.find(v => v.maCode === selectedVoucher.value.maCode)) {
+      selectedVoucher.value = null;
+    }
+  } catch (error) {
+    console.error("Lỗi khi lấy voucher áp dụng:", error);
+    applicableVouchers.value = [];
+    selectedVoucher.value = null;
+  }
+}
+
+const activeInvoiceHasPromotions = computed(() => {
+  if (!activeInvoice.value?.cart) return false;
+  return activeInvoice.value.cart.some(item => Number(item.donGia || 0) < Number(item.sanPhamChiTiet?.giaBan || Infinity));
+});
+
+const canApplyVoucher = (voucher) => {
+  if (!voucher || !activeInvoiceHasPromotions.value) return false;
+  return applicableVouchers.value.some(v => v.maCode === voucher.maCode);
+};
+
+
+// Variant selection modal state
+const variantModalVisible = ref(false);
+const selectedProduct = ref(null);
+const variantOptions = ref([]);
+const selectedVariant = ref(null);
+const variantQuantity = ref(1);
+
+const computeVoucherDiscount = (voucher, baseAmount) => {
+  if (!voucher || !voucher.kieuGiamGia) return 0;
+  if (voucher.kieuGiamGia === 'PERCENT') {
+    return (baseAmount * (voucher.giaTriGiam || 0)) / 100;
+  }
+  return voucher.giaTriGiam || 0;
+};
+
+const computeInvoiceSummary = (invoice, cartItems) => {
+  const subTotal = cartItems.reduce((sum, item) => {
+    const unit = Number(item.donGia || item.sanPhamChiTiet?.giaBan || 0);
+    return sum + unit * Number(item.soLuong || 0);
+  }, 0);
+  const originalTotal = cartItems.reduce((sum, item) => {
+    const unit = Number(item.sanPhamChiTiet?.giaBan || item.donGia || 0);
+    return sum + unit * Number(item.soLuong || 0);
+  }, 0);
+
+  const itemDiscount = Math.max(0, originalTotal - subTotal);
+
+  const promoItemTotal = cartItems
+    .filter(item => Number(item.donGia || 0) < Number(item.sanPhamChiTiet?.giaBan || Infinity))
+    .reduce((sum, item) => sum + Number(item.donGia || 0) * Number(item.soLuong || 0), 0);
+
+  let voucherDiscount = 0;
+  if (invoice?.voucher && promoItemTotal > 0) {
+    voucherDiscount = computeVoucherDiscount(invoice.voucher, promoItemTotal);
+    if (invoice.voucher.giaTriGiamToiDa) {
+      voucherDiscount = Math.min(voucherDiscount, Number(invoice.voucher.giaTriGiamToiDa));
+    }
+    voucherDiscount = Math.min(voucherDiscount, promoItemTotal);
+  }
+
+  const discount = Math.max(0, itemDiscount + voucherDiscount);
+  const total = Math.max(0, subTotal - voucherDiscount);
+  return {
+    subTotal,
+    discount,
+    total
+  };
+};
 
 const addInvoice = async () => {
   if (invoices.value.length >= 5) {
@@ -115,6 +204,7 @@ const addInvoice = async () => {
     
     invoices.value.push(newInv);
     activeInvoiceIndex.value = invoices.value.length - 1;
+    await loadApplicableVouchers(newInv.id);
   } catch (error) {
     console.error("Lỗi khi tạo hóa đơn mới:", error);
     alert("Không thể tạo thêm hóa đơn chờ!");
@@ -129,52 +219,77 @@ const refreshActiveInvoice = async () => {
     const index = activeInvoiceIndex.value;
     
     const cartItems = data.items || [];
-    const subTotal = cartItems.reduce((sum, item) => {
-      const price = item.donGia || item.sanPhamChiTiet?.giaBan || 0;
-      return sum + (price * item.soLuong);
-    }, 0);
-    
+    const summary = computeInvoiceSummary({ voucher: invoices.value[index]?.voucher }, cartItems);
+
     // Update reactivity correctly
+    const currentVoucher = invoices.value[index]?.voucher || null;
     const updatedInvoice = {
       ...invoices.value[index],
       id: data.bill.id,
       code: data.bill.ma,
       cart: cartItems,
       customer: data.bill.nguoiDung,
-      subTotal: subTotal,
-      total: subTotal // TODO: Handle discount from voucher if needed
+      voucher: currentVoucher,
+      ...computeInvoiceSummary({ voucher: currentVoucher }, cartItems)
     };
     invoices.value[index] = updatedInvoice;
+    await loadApplicableVouchers(updatedInvoice.id);
   } catch (error) {
     console.error("Error refreshing invoice:", error);
   }
 };
 
-const addToCart = async (product) => {
+const openVariantModal = async (product) => {
   if (!activeInvoice.value) {
     alert("Vui lòng tạo hóa đơn mới để bắt đầu!");
     return;
   }
-  
+
   try {
     const detailRes = await axios.get(`http://localhost:8080/api/admin/products/${product.id}`);
     const details = detailRes.data.details || [];
-    
     if (details.length === 0) {
       alert("Sản phẩm này hiện không có biến thể nào khả dụng!");
       return;
     }
 
-    const spct = details.find(d => d.soLuong > 0) || details[0];
-    
+    selectedProduct.value = product;
+    variantOptions.value = details;
+    selectedVariant.value = details.find(d => d.soLuong > 0) || details[0];
+    variantQuantity.value = 1;
+    variantModalVisible.value = true;
+  } catch (error) {
+    console.error("Lỗi khi lấy biến thể sản phẩm:", error);
+    alert(error.response?.data?.message || "Lỗi khi tải chi tiết sản phẩm");
+  }
+};
+
+const addToCart = (product) => {
+  openVariantModal(product);
+};
+
+const addToCartSelectedVariant = async () => {
+  if (!activeInvoice.value || !selectedVariant.value) return;
+
+  if (variantQuantity.value < 1) {
+    alert("Số lượng phải lớn hơn 0");
+    return;
+  }
+
+  try {
     await axios.post(`http://localhost:8080/api/admin/pos/invoices/${activeInvoice.value.id}/details`, null, {
-      params: { spctId: spct.id, quantity: 1 }
+      params: {
+        spctId: selectedVariant.value.id,
+        quantity: variantQuantity.value
+      }
     });
+
+    variantModalVisible.value = false;
     await refreshActiveInvoice();
     search.value = '';
   } catch (error) {
-    console.error("Lỗi khi thêm sản phẩm:", error);
-    alert(error.response?.data?.message || "Lỗi khi thêm sản phẩm (hết hàng/không khả dụng)");
+    console.error("Lỗi khi thêm biến thể vào hóa đơn:", error);
+    alert(error.response?.data?.message || "Lỗi khi thêm biến thể vào giỏ hàng");
   }
 };
 
@@ -236,10 +351,39 @@ const selectCustomer = async (customer) => {
 
 const selectVoucher = async (voucher) => {
   try {
+    if (!activeInvoice.value) return;
+
+    if (!voucher || !voucher.maCode) {
+      if (activeInvoice.value) {
+        activeInvoice.value.voucher = null;
+        const details = computeInvoiceSummary(activeInvoice.value, activeInvoice.value.cart || []);
+        activeInvoice.value.subTotal = details.subTotal;
+        activeInvoice.value.discount = details.discount;
+        activeInvoice.value.total = details.total;
+      }
+      return;
+    }
+
+    if (!activeInvoiceHasPromotions.value) {
+      alert('Voucher chỉ áp dụng khi có sản phẩm trong đợt giảm giá');
+      return;
+    }
+
+    if (!applicableVouchers.value.some(v => v.maCode === voucher.maCode)) {
+      alert('Voucher này chưa hợp lệ cho sản phẩm đã chọn');
+      return;
+    }
+
     await axios.put(`http://localhost:8080/api/admin/pos/invoices/${activeInvoice.value.id}/voucher`, null, {
       params: { voucherCode: voucher.maCode }
     });
-    await refreshActiveInvoice();
+
+
+    activeInvoice.value.voucher = voucher;
+    const details = computeInvoiceSummary(activeInvoice.value, activeInvoice.value.cart || []);
+    activeInvoice.value.subTotal = details.subTotal;
+    activeInvoice.value.discount = details.discount;
+    activeInvoice.value.total = details.total;
   } catch (error) {
     alert(error.response?.data?.message || "Lỗi khi áp dụng voucher!");
   }
@@ -396,6 +540,9 @@ const filteredCustomers = computed(() => {
                 <span class="small fw-bold">Hóa đơn {{ index + 1 }}</span>
                 <i class="fas fa-times small opacity-50 hover-opacity-100" @click.stop="removeInvoice(index)"></i>
               </div>
+              <button class="btn btn-sm btn-light rounded-circle shadow-sm" @click="addInvoice">
+                <i class="fas fa-plus"></i>
+              </button>
               <button class="btn btn-outline-danger btn-sm rounded-circle shadow-sm" @click="addInvoice" v-if="invoices.length < 5">
                 <i class="fas fa-plus"></i>
               </button>
@@ -441,7 +588,7 @@ const filteredCustomers = computed(() => {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr v-for="product in filteredProducts" :key="product.id" class="pointer" @click="addToCart(product)">
+                      <tr v-for="product in filteredProducts" :key="product.id" class="pointer">
                         <td>
                           <div class="d-flex align-items-center">
                             <img :src="product.img" width="50" height="50" class="rounded object-fit-cover me-3 border">
@@ -449,9 +596,15 @@ const filteredCustomers = computed(() => {
                           </div>
                         </td>
                         <td><span class="badge bg-light text-dark border small">SP00{{ product.id }}</span></td>
-                        <td><span class="text-danger fw-bold">{{ product.price.toLocaleString() }} đ</span></td>
+                        <td>
+                          <div v-if="product.hasPromotion">
+                            <span class="text-danger fw-bold d-block">{{ product.price.toLocaleString() }} đ</span>
+                            <small class="text-muted text-decoration-line-through">{{ product.originalPrice.toLocaleString() }} đ</small>
+                          </div>
+                          <span v-else class="text-dark fw-bold">{{ product.price.toLocaleString() }} đ</span>
+                        </td>
                         <td class="text-center">
-                          <button class="btn btn-danger btn-sm rounded-pill px-3">
+                          <button class="btn btn-danger btn-sm rounded-pill px-3" @click.stop="openVariantModal(product)">
                             <i class="fas fa-plus me-1"></i> Thêm
                           </button>
                         </td>
@@ -549,17 +702,24 @@ const filteredCustomers = computed(() => {
                       {{ item.sanPhamChiTiet?.mauSac?.ten || 'Màu' }} / {{ item.sanPhamChiTiet?.kichThuoc?.ten || 'Size' }}
                     </p>
                     <p class="small text-danger mb-0 fw-bold">
-                      {{ (item.donGia || item.sanPhamChiTiet?.giaBan || 0).toLocaleString() }} đ
+                      <template v-if="item.donGia < item.sanPhamChiTiet?.giaBan">
+                        <span class="text-muted text-decoration-line-through me-2" style="font-size: 10px;">{{ item.sanPhamChiTiet.giaBan.toLocaleString() }} đ</span>
+                        <span>{{ item.donGia.toLocaleString() }} đ</span>
+                        <span class="d-block text-success fw-normal mt-1" style="font-size: 9px;"><i class="fas fa-check-circle me-1"></i>Đã áp dụng giá tốt</span>
+                      </template>
+                      <template v-else>
+                        {{ (item.donGia || item.sanPhamChiTiet?.giaBan || 0).toLocaleString() }} đ
+                      </template>
                     </p>
                   </div>
                   
                   <!-- Nút Tăng Giảm Số Lượng -->
                   <div class="d-flex align-items-center">
-                    <div class="input-group input-group-sm rounded border overflow-hidden" style="width: 80px;">
+                    <div class="input-group input-group-sm rounded border overflow-hidden shadow-none" style="width: 80px;">
                       
                       <!-- NÚT TRỪ (Đã thêm dấu cách trước @click) -->
                       <button 
-                        class="btn btn-light px-2 border-0" 
+                        class="btn btn-light px-2 border-0 shadow-none" 
                         @click="updateQuantity(item.idGhct, item.soLuong - 1)"
                       >
                         <i class="fas" :class="item.soLuong > 1 ? 'fa-minus' : 'fa-trash-alt text-danger'" style="font-size: 10px;"></i>
@@ -567,16 +727,17 @@ const filteredCustomers = computed(() => {
                       
                       <!-- Ô Nhập Số Lượng -->
                       <input 
-                        type="text" 
-                        class="form-control border-0 bg-white text-center p-0 fw-bold" 
+                        type="number" 
+                        class="form-control border-0 bg-white text-center p-0 fw-bold shadow-none" 
                         style="font-size: 13px;" 
                         :value="item.soLuong" 
-                        readonly
+                        @change="(e) => updateQuantity(item.idGhct, parseInt(e.target.value))"
+                        min="1"
                       >
                       
                       <!-- NÚT CỘNG (Đã thêm dấu cách trước @click) -->
                       <button 
-                        class="btn btn-light px-2 border-0" 
+                        class="btn btn-light px-2 border-0 shadow-none" 
                         @click="updateQuantity(item.idGhct, item.soLuong + 1)"
                       >
                         <i class="fas fa-plus" style="font-size: 10px;"></i>
@@ -604,13 +765,14 @@ const filteredCustomers = computed(() => {
                   <i class="fas fa-chevron-down small opacity-50"></i>
                 </button>
                 <ul class="dropdown-menu w-100 shadow-lg border-0 rounded-3 mt-1">
-                  <li v-for="v in vouchers" :key="v.id">
+                  <li v-if="applicableVouchers.length === 0" class="px-3 py-2 text-center text-muted small">Không có voucher hợp lệ cho sản phẩm trong đợt giảm giá</li>
+                  <li v-for="v in applicableVouchers" :key="v.id">
                     <a class="dropdown-item p-3" href="#" @click.prevent="selectVoucher(v)">
                       <div class="d-flex justify-content-between">
                         <span class="fw-bold text-danger">{{ v.maCode }}</span>
-                        <span class="badge bg-danger-subtle text-danger">-{{ v.kieuGiamGia === 'PERCENT' ? v.giaTriGiam + '%' : v.giaTriGiam.toLocaleString() + 'đ' }}</span>
+                        <span class="badge bg-danger-subtle text-danger">-{{ v.kieuGiamGia === 'PERCENT' ? v.giaTriGiam + '%' : Number(v.giaTriGiam).toLocaleString() + 'đ' }}</span>
                       </div>
-                      <div class="text-muted" style="font-size: 11px;">Đơn tối thiểu: {{ v.giaTriToiThieu.toLocaleString() }}đ</div>
+                      <div class="text-muted" style="font-size: 11px;">Đơn tối thiểu: {{ Number(v.giaTriToiThieu || 0).toLocaleString() }}đ</div>
                     </a>
                   </li>
                   <li v-if="activeInvoice.voucher">
@@ -677,6 +839,38 @@ const filteredCustomers = computed(() => {
           </div>
         </div>
       </div>
+      </div>
+
+      <!-- Modal chọn biến thể sản phẩm -->
+      <div v-if="variantModalVisible" class="payment-modal-overlay">
+        <div class="payment-modal-content rounded-4 shadow-lg overflow-hidden border-0">
+          <div class="modal-header bg-danger text-white p-4 border-0 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold"><i class="fas fa-box-open me-2"></i>Chọn biến thể</h5>
+            <button class="btn-close btn-close-white shadow-none" @click="variantModalVisible = false"></button>
+          </div>
+          <div class="modal-body p-4 bg-light">
+            <p class="small text-muted mb-3">Sản phẩm: <strong>{{ selectedProduct?.name || '' }}</strong></p>
+            <div v-if="variantOptions.length === 0" class="text-center text-muted">Không có biến thể</div>
+            <div v-else>
+              <div class="mb-3">
+                <label class="form-label small">Biến thể</label>
+                <select class="form-select" v-model="selectedVariant" style="font-size: 14px;">
+                  <option v-for="variant in variantOptions" :key="variant.id" :value="variant">
+                    {{ variant.mauSac?.ten || 'Màu?' }} / {{ variant.kichThuoc?.ten || 'Size?' }} / Giá: {{ Number(variant.giaBan || 0).toLocaleString() }} đ / Tồn: {{ variant.soLuong || 0 }}
+                  </option>
+                </select>
+              </div>
+              <div class="mb-4">
+                <label class="form-label small">Số lượng</label>
+                <input type="number" class="form-control" v-model.number="variantQuantity" min="1" />
+              </div>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+              <button class="btn btn-light" @click="variantModalVisible = false">Hủy</button>
+              <button class="btn btn-danger" @click="addToCartSelectedVariant">Thêm vào hóa đơn</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Modal Xác nhận thanh toán -->

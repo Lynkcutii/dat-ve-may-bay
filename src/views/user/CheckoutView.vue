@@ -14,6 +14,7 @@ const selectedPaymentMethodId = ref(null);
 const selectedVoucher = ref(null);
 const vouchers = ref([]);
 const loading = ref(false);
+const savedAddresses = ref([]);
 
 const orderInfo = ref({
   tenNguoiNhan: authStore.currentUser?.hoTen || '',
@@ -31,9 +32,40 @@ onMounted(async () => {
     router.push('/cart');
     return;
   }
+  await fetchSavedAddresses();
   await fetchVouchers();
   await fetchPaymentMethods();
 });
+
+const fetchSavedAddresses = async () => {
+  if (!authStore.currentUser?.id) return;
+
+  try {
+    const res = await axios.get(`http://localhost:8080/api/user/addresses/${authStore.currentUser.id}`);
+    savedAddresses.value = res.data || [];
+
+    const defaultAddress = savedAddresses.value.find(addr => addr.laMacDinh) || savedAddresses.value[0];
+    if (defaultAddress) {
+      orderInfo.value.tenNguoiNhan = defaultAddress.tenNguoiNhan || orderInfo.value.tenNguoiNhan;
+      orderInfo.value.soDienThoai = defaultAddress.soDienThoai || orderInfo.value.soDienThoai;
+      orderInfo.value.tinh = defaultAddress.tinh || '';
+      orderInfo.value.huyen = defaultAddress.huyen || '';
+      orderInfo.value.xa = defaultAddress.xa || '';
+      orderInfo.value.diaChiChiTiet = defaultAddress.diaChiChiTiet || orderInfo.value.diaChiChiTiet;
+    }
+  } catch (error) {
+    console.error("Error fetching addresses:", error);
+  }
+};
+
+const formatSavedAddress = (address) => {
+  return [
+    address?.diaChiChiTiet,
+    address?.xa,
+    address?.huyen,
+    address?.tinh
+  ].filter(Boolean).join(', ');
+};
 
 const fetchPaymentMethods = async () => {
   try {
@@ -163,6 +195,19 @@ const handlePlaceOrder = async () => {
         <!-- 1. Customer Info & Address -->
         <div class="bg-white rounded-4 shadow-sm p-4 mb-4">
           <h5 class="fw-bold mb-4 border-bottom pb-3"><i class="fas fa-shipping-fast me-2"></i> THÔNG TIN GIAO HÀNG</h5>
+          <div v-if="savedAddresses.length > 0" class="mb-4 p-3 rounded-3 border bg-light-subtle">
+            <div class="d-flex justify-content-between align-items-start gap-3">
+              <div>
+                <div class="small text-uppercase fw-bold text-secondary mb-2">Địa chỉ đã lưu</div>
+                <div class="fw-bold">{{ orderInfo.tenNguoiNhan }}</div>
+                <div class="small text-secondary">{{ orderInfo.soDienThoai }}</div>
+                <div class="small text-secondary">{{ formatSavedAddress(orderInfo) }}</div>
+              </div>
+              <router-link to="/account" class="btn btn-sm btn-outline-dark rounded-pill px-3 fw-bold">
+                Sổ địa chỉ
+              </router-link>
+            </div>
+          </div>
           <form class="row g-3">
             <div class="col-md-12">
               <label class="form-label small fw-bold text-uppercase">Họ và tên</label>
@@ -228,14 +273,14 @@ const handlePlaceOrder = async () => {
           <div class="order-items mb-4">
             <div v-for="item in cartStore.selectedItems" :key="item.idGhct" class="d-flex align-items-center mb-3">
               <div class="position-relative">
-                <img :src="item.sanPhamChiTiet.sanPham.hinhAnhs?.[0]?.url || 'https://placehold.co/60x80'" class="rounded-3 border" width="60" alt="Product">
+                <img :src="item.sanPhamChiTiet?.sanPham?.hinhAnhs?.[0]?.url || 'https://placehold.co/60x80'" class="rounded-3 border" width="60" alt="Product">
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary" style="font-size: 10px;">{{ item.soLuong }}</span>
               </div>
               <div class="ms-4 flex-grow-1">
-                <h6 class="fw-bold mb-0 small">{{ item.sanPhamChiTiet.sanPham.tenSanPham }}</h6>
-                <p class="text-secondary small mb-0">SIZE: {{ item.sanPhamChiTiet.kichThuoc.ten }} | MÀU: {{ item.sanPhamChiTiet.mauSac.ten }}</p>
+                <h6 class="fw-bold mb-0 small">{{ item.sanPhamChiTiet?.sanPham?.tenSanPham || 'Sản phẩm' }}</h6>
+                <p class="text-secondary small mb-0">SIZE: {{ item.sanPhamChiTiet?.kichThuoc?.ten || 'N/A' }} | MÀU: {{ item.sanPhamChiTiet?.mauSac?.ten || 'N/A' }}</p>
               </div>
-              <div class="fw-bold small">{{ formatPrice(item.sanPhamChiTiet.giaBan * item.soLuong) }}</div>
+              <div class="fw-bold small">{{ formatPrice((item.donGia || item.sanPhamChiTiet?.giaBan || 0) * item.soLuong) }}</div>
             </div>
           </div>
 

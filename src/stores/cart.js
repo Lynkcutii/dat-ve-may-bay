@@ -16,11 +16,17 @@ export const useCartStore = defineStore('cart', {
       return authStore.currentUser?.id;
     },
     totalItems: (state) => state.items.reduce((acc, item) => acc + item.soLuong, 0),
-    totalPrice: (state) => state.items.reduce((acc, item) => acc + (item.sanPhamChiTiet.giaBan * item.soLuong), 0),
+    totalPrice: (state) => state.items.reduce((acc, item) => {
+      const price = item.donGia || item.sanPhamChiTiet.giaBan;
+      return acc + (price * item.soLuong);
+    }, 0),
     selectedItems: (state) => state.items.filter(item => state.selectedItemIds.includes(item.idGhct)),
     selectedTotalPrice: (state) => state.items
       .filter(item => state.selectedItemIds.includes(item.idGhct))
-      .reduce((acc, item) => acc + (item.sanPhamChiTiet.giaBan * item.soLuong), 0),
+      .reduce((acc, item) => {
+        const price = item.donGia || item.sanPhamChiTiet.giaBan;
+        return acc + (price * item.soLuong);
+      }, 0),
   },
   actions: {
     async fetchCart() {

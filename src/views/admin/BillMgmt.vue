@@ -30,7 +30,7 @@ const filteredBills = computed(() => {
     if (filterLoaiDon.value && bill.loaiDonHang !== filterLoaiDon.value) return false;
 
     return true;
-  });
+  }).sort((a, b) => new Date(b.ngayTao) - new Date(a.ngayTao));
 });
 
 const totalPages = computed(() => Math.ceil(filteredBills.value.length / itemsPerPage.value));

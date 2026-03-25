@@ -19,7 +19,7 @@ const filteredPromotions = computed(() => {
     if (filterData.value.year && y !== parseInt(filterData.value.year)) return false;
 
     return true;
-  });
+  }).sort((a, b) => b.id - a.id);
 });
 
 const handleFilter = (data) => {
@@ -35,8 +35,8 @@ const fetchPromotions = async () => {
       name: p.tenDot,
       type: p.kieuGiamGia,
       discount: p.giaTriGiam,
-      start: p.ngayBat_dau?.split('T')[0],
-      end: p.ngayKet_thuc?.split('T')[0],
+      start: p.ngayBatDau?.split('T')[0],
+      end: p.ngayKetHuc?.split('T')[0],
       status: p.trangThai
     }));
   } catch (error) {

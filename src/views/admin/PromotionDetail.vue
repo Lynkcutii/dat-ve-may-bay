@@ -12,8 +12,8 @@ const promotion = ref({
   tenDot: '',
   kieuGiamGia: 'PERCENT',
   giaTriGiam: 0,
-  ngayBat_dau: '',
-  ngayKet_thuc: '',
+  ngayBatDau: '',
+  ngayKetHuc: '',
   trangThai: true
 });
 
@@ -27,7 +27,7 @@ onMounted(async () => {
     products.value = prodRes.data.map(p => ({
       id: p.id,
       code: p.ma,
-      name: p.ten
+      name: p.tenSanPham
     }));
   } catch (error) {
     console.error("Error fetching products:", error);
@@ -39,8 +39,8 @@ onMounted(async () => {
       const p = promoRes.data;
       promotion.value = {
         ...p,
-        ngayBat_dau: p.ngayBat_dau?.split('T')[0],
-        ngayKet_thuc: p.ngayKet_thuc?.split('T')[0]
+        ngayBatDau: p.ngayBatDau?.split('T')[0],
+        ngayKetHuc: p.ngayKetHuc?.split('T')[0]
       };
 
       const selectedRes = await axios.get(`http://localhost:8080/api/admin/promotions/${props.id}/products`);
@@ -53,14 +53,20 @@ onMounted(async () => {
 
 const handleSave = async () => {
   try {
-    await axios.post('http://localhost:8080/api/admin/promotions', {
-      promotion: promotion.value,
+    const payload = {
+      promotion: {
+        ...promotion.value,
+        ngayBatDau: promotion.value.ngayBatDau ? (promotion.value.ngayBatDau.includes('T') ? promotion.value.ngayBatDau : promotion.value.ngayBatDau + 'T00:00:00') : null,
+        ngayKetHuc: promotion.value.ngayKetHuc ? (promotion.value.ngayKetHuc.includes('T') ? promotion.value.ngayKetHuc : promotion.value.ngayKetHuc + 'T23:59:59') : null
+      },
       productIds: selectedProductIds.value
-    });
+    };
+    await axios.post('http://localhost:8080/api/admin/promotions', payload);
     alert("Lưu khuyến mãi thành công!");
     router.push('/admin/promotions');
   } catch (error) {
-    alert("Lưu thất bại!");
+    console.error("Error saving promotion:", error);
+    alert("Lưu thất bại: " + (error.response?.data?.message || error.message));
   }
 };
 </script>
@@ -92,11 +98,11 @@ const handleSave = async () => {
           </div>
           <div class="col-md-6">
             <label class="form-label">Bắt đầu</label>
-            <input type="date" v-model="promotion.ngayBat_dau" class="form-control" required>
+            <input type="date" v-model="promotion.ngayBatDau" class="form-control" required>
           </div>
           <div class="col-md-6">
             <label class="form-label">Kết thúc</label>
-            <input type="date" v-model="promotion.ngayKet_thuc" class="form-control" required>
+            <input type="date" v-model="promotion.ngayKetHuc" class="form-control" required>
           </div>
           <div class="col-md-12">
             <label class="form-label d-block">Trạng thái</label>

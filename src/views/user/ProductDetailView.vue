@@ -13,9 +13,30 @@ const product = ref(null);
 const variants = ref([]);
 const loading = ref(true);
 const quantity = ref(1);
+const selectedImage = ref('');
 
 const selectedColor = ref(null);
 const selectedSize = ref(null);
+
+const normalizeColorName = (color) => {
+  const rawName = color?.ten ?? '';
+  const code = String(color?.ma ?? rawName).trim().toUpperCase();
+
+  const colorMap = {
+    DEN: 'Đen',
+    TRANG: 'Trắng',
+    DO: 'Đỏ',
+    XANH: 'Xanh',
+    XANH_DUONG: 'Xanh dương',
+    XANH_LA: 'Xanh lá',
+    VANG: 'Vàng',
+    HONG: 'Hồng',
+    XAM: 'Xám',
+    CAM: 'Cam'
+  };
+
+  return colorMap[code] || rawName;
+};
 
 const fetchData = async () => {
   try {
@@ -25,7 +46,13 @@ const fetchData = async () => {
       axios.get(`${apiBaseUrl}/products/${route.params.id}/variants`)
     ]);
     product.value = prodRes.data;
-    variants.value = varRes.data;
+    variants.value = varRes.data.map(variant => ({
+      ...variant,
+      mauSac: variant.mauSac
+        ? { ...variant.mauSac, ten: normalizeColorName(variant.mauSac) }
+        : variant.mauSac
+    }));
+    selectedImage.value = product.value?.hinhAnhs?.[0]?.url || 'https://placehold.co/600x750';
     
     if (variants.value.length > 0) {
       selectedColor.value = variants.value[0].mauSac.ten;
@@ -41,6 +68,10 @@ const fetchData = async () => {
 onMounted(() => {
   fetchData();
 });
+
+const handleSelectImage = (imageUrl) => {
+  selectedImage.value = imageUrl;
+};
 
 const colors = computed(() => {
   const uniqueColors = [];
@@ -79,15 +110,41 @@ const isSizeOutOfStock = (sizeName) => {
   return variant ? variant.soLuong <= 0 : true;
 };
 
+const getDiscountedPrice = (variant) => {
+  if (!variant) return 0;
+  // logic khuyến mại đã được BE tính toán sẵn (giả sử BE trả về giá sau giảm trong variants nếu cần)
+  // Tuy nhiên ở đây BE trả về SanPhamChiTiet.giaBan là giá gốc.
+  // Ta cần check khuyến mại từ product.giaSauGiam / giaGoc tỉ lệ
+  if (!product.value || !product.value.giaGoc) return variant.giaBan;
+  
+  const ratio = (product.value.giaSauGiam || product.value.giaGoc) / product.value.giaGoc;
+  return variant.giaBan * ratio;
+};
+
+const hasPromotion = computed(() => {
+  return product.value && product.value.giaSauGiam < product.value.giaGoc;
+});
+
 const formatPrice = (value) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
 };
 
 const getColorCode = (colorName) => {
   const colorMap = {
+    'DEN': '#000000',
+    'TRANG': '#FFFFFF',
+    'DO': '#FF0000',
+    'XANH': '#0000FF',
+    'XANH_DUONG': '#0000FF',
+    'XANH_LA': '#00FF00',
+    'VANG': '#FFFF00',
+    'HONG': '#FFC0CB',
+    'XAM': '#808080',
+    'CAM': '#FFA500',
     'Đen': '#000000',
     'Trắng': '#FFFFFF',
     'Đỏ': '#FF0000',
+    'Xanh': '#0000FF',
     'Xanh dương': '#0000FF',
     'Xanh lá': '#00FF00',
     'Vàng': '#FFFF00',
@@ -111,10 +168,11 @@ const handleAddToCart = async () => {
   }
 
   // Debug thử xem ID và số lượng có chuẩn không
-  console.log("Adding to cart - ID:", selectedVariant.value.id, "Qty:", quantity.value);
+  const finalPrice = getDiscountedPrice(selectedVariant.value);
+  console.log("Adding to cart - ID:", selectedVariant.value.id, "Qty:", quantity.value, "Price:", finalPrice);
 
   try {
-    await cartStore.addToCart(selectedVariant.value.id, quantity.value);
+    await cartStore.addToCart(selectedVariant.value.id, quantity.value, finalPrice);
     alert("Đã thêm vào giỏ hàng!");
   } catch (error) {
     // In lỗi chi tiết ra console để xem BE trả về gì
@@ -147,13 +205,21 @@ const decrementQty = () => {
         <div class="row g-3">
           <div class="col-2">
             <div class="d-flex flex-column gap-3 thumb-container">
-              <img v-for="(img, i) in product.hinhAnhs" :key="i" :src="img.url" class="img-fluid rounded-3 cursor-pointer border shadow-sm thumb" alt="Thumb">
+              <img
+                v-for="(img, i) in product.hinhAnhs"
+                :key="i"
+                :src="img.url"
+                class="img-fluid rounded-3 cursor-pointer border shadow-sm thumb"
+                :class="{ active: selectedImage === img.url }"
+                alt="Thumb"
+                @click="handleSelectImage(img.url)"
+              >
               <img v-if="!product.hinhAnhs || product.hinhAnhs.length === 0" src="https://placehold.co/100x120" class="img-fluid rounded-3 cursor-pointer border shadow-sm thumb" alt="Thumb">
             </div>
           </div>
           <div class="col-10">
             <div class="main-img-container bg-white rounded-4 shadow-sm overflow-hidden border">
-              <img :src="product.hinhAnhs && product.hinhAnhs.length > 0 ? product.hinhAnhs[0].url : 'https://placehold.co/600x750'" class="img-fluid w-100 h-100 object-fit-cover" alt="Main Product Image">
+              <img :src="selectedImage || 'https://placehold.co/600x750'" class="img-fluid w-100 h-100 object-fit-cover" alt="Main Product Image">
             </div>
           </div>
         </div>
@@ -178,7 +244,15 @@ const decrementQty = () => {
             <span class="text-secondary small">(12 đánh giá)</span>
           </div>
 
-          <h3 class="text-danger fw-bold mb-4 fs-2">
+          <div v-if="hasPromotion" class="mb-4">
+            <span class="text-muted text-decoration-line-through me-3 fs-5">
+              {{ selectedVariant ? formatPrice(selectedVariant.giaBan) : formatPrice(product.giaGoc) }}
+            </span>
+            <span class="text-danger fw-bold fs-2">
+              {{ selectedVariant ? formatPrice(getDiscountedPrice(selectedVariant)) : formatPrice(product.giaSauGiam) }}
+            </span>
+          </div>
+          <h3 v-else class="text-danger fw-bold mb-4 fs-2">
             {{ selectedVariant ? formatPrice(selectedVariant.giaBan) : formatPrice(product.giaGoc) }}
           </h3>
           
@@ -193,7 +267,7 @@ const decrementQty = () => {
                 v-for="color in colors" 
                 :key="color.id" 
                 class="color-swatch" 
-                :style="{ backgroundColor: color.ma.startsWith('#') ? color.ma : getColorCode(color.ten) }"
+                :style="{ backgroundColor: getColorCode(color.ten) }"
                 :class="{ active: selectedColor === color.ten, 'out-of-stock': isColorOutOfStock(color.ten) }"
                 @click="selectedColor = color.ten"
                 :title="color.ten + (isColorOutOfStock(color.ten) ? ' (Hết hàng)' : '')"
@@ -220,9 +294,17 @@ const decrementQty = () => {
           <!-- Actions -->
           <div class="row g-3 mb-5">
             <div class="col-4">
-              <div class="qty-container d-flex align-items-center justify-content-between border rounded-pill px-3 py-2">
+              <div class="qty-container d-flex align-items-center justify-content-between border rounded-pill px-3 py-1">
                 <button @click="decrementQty" class="btn btn-link text-dark p-0 shadow-none" :disabled="isOutOfStock"><i class="fas fa-minus small"></i></button>
-                <span class="fw-bold">{{ isOutOfStock ? 0 : quantity }}</span>
+                <input 
+                  type="number" 
+                  v-model.number="quantity" 
+                  class="form-control border-0 bg-transparent text-center p-0 fw-bold shadow-none no-arrows" 
+                  style="width: 40px;"
+                  :disabled="isOutOfStock"
+                  min="1"
+                  :max="selectedVariant?.soLuong || 1"
+                >
                 <button @click="incrementQty" class="btn btn-link text-dark p-0 shadow-none" :disabled="isOutOfStock || (selectedVariant && quantity >= selectedVariant.soLuong)"><i class="fas fa-plus small"></i></button>
               </div>
             </div>
@@ -309,5 +391,13 @@ const decrementQty = () => {
 }
 .main-img-container {
   aspect-ratio: 4/5;
+}
+.no-arrows::-webkit-inner-spin-button,
+.no-arrows::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-arrows {
+  -moz-appearance: textfield;
 }
 </style>

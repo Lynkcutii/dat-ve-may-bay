@@ -81,34 +81,56 @@ const parseMessage = (text) => {
             <span class="online-status"></span>
           </div>
           <div class="ms-2">
-            <div class="fw-bold lh-1 mb-1">Bee Bot</div>
-            <div class="small opacity-75" style="font-size: 10px;">Đang trực tuyến</div>
+            <div class="fw-bold lh-1 mb-1" style="font-size: 14px;">Bee Bot AI</div>
+            <div class="d-flex align-items-center">
+              <span class="online-dot me-1"></span>
+              <div class="small opacity-75" style="font-size: 10px;">Đang trực tuyến</div>
+            </div>
           </div>
         </div>
-        <button @click="toggleChat" class="btn btn-sm btn-link text-white p-0">
-          <i class="fas fa-times fs-5"></i>
+        <button @click="toggleChat" class="btn btn-sm btn-link text-white p-0 close-btn">
+          <i class="fas fa-minus fs-6"></i>
         </button>
       </div>
 
       <div class="chat-messages p-3">
-        <div v-for="(msg, index) in messages" :key="index" :class="['message-wrapper mb-3', msg.sender]">
-          <div v-if="msg.sender === 'bot'" class="bot-avatar me-2">
-            <img :src="capyImage" width="24" height="24" class="rounded-circle">
+        <div v-for="(msg, index) in messages" :key="index" :class="['message-container mb-4', msg.sender]">
+          <div v-if="msg.sender === 'bot'" class="bot-avatar shadow-sm">
+            <img :src="capyImage" alt="Bot">
           </div>
-          <div class="bubble-content p-2 px-3 rounded-4 shadow-sm small">
+          <div class="message-bubble shadow-sm">
             <div v-for="(part, i) in parseMessage(msg.text)" :key="i">
-              <span v-if="part.type === 'text'">{{ part.content }}</span>
+              <span v-if="part.type === 'text'" class="text-content">{{ part.content }}</span>
               <router-link 
                 v-else-if="part.type === 'product'" 
-                :to="'/product/' + part.id" 
-                class="product-card-link d-block mt-2 p-2 bg-light border border-warning rounded shadow-sm text-decoration-none"
+                :to="'/product-detail/' + part.id" 
+                class="product-card d-block mt-2 text-decoration-none"
               >
-                <div class="d-flex align-items-center">
-                  <i class="fas fa-shopping-cart text-warning me-2"></i>
-                  <span class="fw-bold text-dark">{{ part.name }}</span>
+                <div class="card-inner p-2">
+                  <div class="d-flex align-items-center mb-1">
+                    <div class="product-icon me-2">
+                      <i class="fas fa-shopping-bag text-warning"></i>
+                    </div>
+                    <div class="fw-bold text-dark text-truncate small">{{ part.name }}</div>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center mt-2">
+                    <span class="text-primary fw-bold" style="font-size: 11px;">Xem chi tiết</span>
+                    <i class="fas fa-chevron-right text-muted" style="font-size: 8px;"></i>
+                  </div>
                 </div>
-                <div class="text-primary small mt-1">Xem chi tiết <i class="fas fa-chevron-right ms-1" style="font-size: 8px;"></i></div>
               </router-link>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Typing Indicator -->
+        <div v-if="isLoading" class="message-wrapper bot mb-3">
+          <div class="bot-avatar me-2">
+            <img :src="capyImage" width="24" height="24" class="rounded-circle">
+          </div>
+          <div class="bubble-content p-2 px-3 rounded-4 shadow-sm typing-bubble">
+            <div class="typing-dots">
+              <span></span><span></span><span></span>
             </div>
           </div>
         </div>
@@ -177,57 +199,179 @@ const parseMessage = (text) => {
 }
 
 .chat-header {
-  background: linear-gradient(135deg, #212529 0%, #343a40 100%);
+  background: linear-gradient(135deg, #2c3e50 0%, #000000 100%);
   color: white;
   padding: 1rem;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
-.online-status {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 10px;
-  height: 10px;
-  background: #28a745;
-  border: 2px solid #212529;
+.online-dot {
+  width: 6px;
+  height: 6px;
+  background-color: #2ecc71;
   border-radius: 50%;
+  display: inline-block;
+}
+
+.message-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.message-container.user {
+  flex-direction: row-reverse;
+}
+
+.bot-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: white;
+  flex-shrink: 0;
+}
+
+.bot-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.message-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  position: relative;
+}
+
+.bot .message-bubble {
+  background: white;
+  color: #333;
+  border-bottom-left-radius: 4px;
+}
+
+.user .message-bubble {
+  background: #ffc107;
+  color: #1a1a1a;
+  border-bottom-right-radius: 4px;
+  font-weight: 500;
+}
+
+.text-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.product-card {
+  background: #fdfdfd;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.25s ease;
+}
+
+.product-card:hover {
+  border-color: #ffc107;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.card-inner {
+  background: white;
+}
+
+.product-icon {
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 193, 7, 0.1);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
 }
 
 .chat-messages {
   flex-grow: 1;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  background-image: radial-gradient(#dee2e6 1px, transparent 1px);
-  background-size: 20px 20px;
+  padding-bottom: 20px;
+  background-color: #f0f2f5;
+  scrollbar-width: thin;
 }
 
-.message-wrapper {
-  display: flex;
-  max-width: 85%;
-  align-items: flex-end;
-}
-
-.message-wrapper.bot {
-  align-self: flex-start;
-}
-
-.message-wrapper.bot .bubble-content {
+.chat-input {
   background: white;
-  color: #212529;
-  border-bottom-left-radius: 4px !important;
+  padding: 12px 16px;
+  border-top: 1px solid #eee;
 }
 
-.message-wrapper.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
+.typing-bubble {
+  padding: 12px 16px;
+  background: white;
+  border-radius: 18px;
+  border-bottom-left-radius: 4px;
+  width: fit-content;
 }
 
-.message-wrapper.user .bubble-content {
+.typing-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.typing-dots span {
+  width: 6px;
+  height: 6px;
   background: #ffc107;
-  color: #212529;
-  font-weight: 500;
-  border-bottom-right-radius: 4px !important;
+  border-radius: 50%;
+  animation: typing 1.4s infinite ease-in-out;
+  display: inline-block;
+}
+
+.typing-dots span:nth-child(1) { animation-delay: 0s; }
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typing {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* Product Card Styling */
+.product-card-link {
+  transition: all 0.2s ease;
+  min-width: 180px;
+}
+
+.product-card-link:hover {
+  background: #fff !important;
+  border-color: #ffc107 !important;
+  transform: scale(1.02);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+.product-icon-bg {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 193, 7, 0.1);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.product-name-truncate {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.smaller {
+  font-size: 11px;
 }
 
 .animate-slide-up {

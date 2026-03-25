@@ -39,13 +39,20 @@ const handleFilter = (data) => {
   currentPage.value = 1;
 };
 
+function getTotalQuantity(product) {
+  if (!product) return 0;
+  if (typeof product.tongSoLuong === 'number') return product.tongSoLuong;
+  if (!product.details) return 0;
+  return product.details.reduce((sum, d) => sum + (d.soLuong || 0), 0);
+}
+
 const fetchProducts = async () => {
   try {
     loading.value = true;
     const res = await axios.get(`${apiBaseUrl}/products`);
     products.value = res.data;
   } catch (error) {
-    console.error("Error fetching products:", error);
+    console.error('Error fetching products:', error);
   } finally {
     loading.value = false;
   }
@@ -59,11 +66,11 @@ const toggleStatus = async (product) => {
   if (confirm(`Bạn có muốn ${product.trangThai ? 'ngừng bán' : 'tiếp tục bán'} sản phẩm "${product.tenSanPham}"?`)) {
     try {
       await axios.put(`${apiBaseUrl}/products/${product.id}/toggle-status`);
-      alert("Cập nhật trạng thái thành công!");
+      alert('Cập nhật trạng thái thành công!');
       fetchProducts();
     } catch (error) {
-      console.error("Error toggling product status:", error);
-      alert("Cập nhật thất bại!");
+      console.error('Error toggling product status:', error);
+      alert('Cập nhật thất bại!');
     }
   }
 };
@@ -94,18 +101,43 @@ const toggleStatus = async (product) => {
             <thead class="bg-light">
               <tr>
                 <th class="ps-4">ID</th>
+                <th>Ảnh</th>
                 <th>Tên Sản Phẩm</th>
                 <th>Danh Mục</th>
+                <th>Thương Hiệu</th>
+                <th>Số Lượng</th>
                 <th>Giá Gốc (VNĐ)</th>
-                <th>Trạng thái</th>
-                <th class="text-end pe-4">Thao tác</th>
+                <th>Trạng Thái</th>
+                <th class="text-end pe-4">Thao Tác</th>
               </tr>
             </thead>
             <tbody>
-              <tr v-for="product in filteredProducts" :key="product.id">
+              <tr v-for="product in paginatedProducts" :key="product.id">
                 <td class="ps-4">#{{ product.id }}</td>
+                <td>
+                  <img
+                    :src="(product.hinhAnhs && product.hinhAnhs.length > 0) ? product.hinhAnhs[0].url : 'https://via.placeholder.com/50'"
+                    width="45"
+                    height="45"
+                    class="rounded border shadow-sm object-fit-cover"
+                  >
+                </td>
                 <td class="fw-bold">{{ product.tenSanPham }}</td>
-                <td><span class="badge bg-info text-dark opacity-75">{{ product.danhMuc ? product.danhMuc.ten : 'N/A' }}</span></td>
+                <td>
+                  <span class="badge bg-info text-dark opacity-75">
+                    {{ product.danhMuc ? product.danhMuc.ten : 'N/A' }}
+                  </span>
+                </td>
+                <td>
+                  <span class="badge bg-light text-dark border opacity-75">
+                    {{ product.thuongHieu ? product.thuongHieu.tenThuongHieu : 'N/A' }}
+                  </span>
+                </td>
+                <td>
+                  <span class="fw-bold" :class="getTotalQuantity(product) > 0 ? 'text-dark' : 'text-danger'">
+                    {{ getTotalQuantity(product) }}
+                  </span>
+                </td>
                 <td>{{ product.giaGoc?.toLocaleString() }}</td>
                 <td>
                   <span :class="product.trangThai ? 'badge bg-success' : 'badge bg-secondary'">
@@ -113,7 +145,7 @@ const toggleStatus = async (product) => {
                   </span>
                 </td>
                 <td class="text-end pe-4">
-                  <router-link :to="{ path: '/admin/products/edit/' + product.id, query: { mode: 'view' }}" class="btn btn-sm btn-outline-info me-2" title="Xem chi tiết">
+                  <router-link :to="{ path: '/admin/products/edit/' + product.id, query: { mode: 'view' } }" class="btn btn-sm btn-outline-info me-2" title="Xem chi tiết">
                     <i class="fas fa-eye"></i>
                   </router-link>
                   <router-link :to="'/admin/products/edit/' + product.id" class="btn btn-sm btn-outline-primary me-2" title="Sửa">
@@ -139,6 +171,7 @@ const toggleStatus = async (product) => {
   letter-spacing: 0.5px;
   padding: 15px 10px;
 }
+
 .table tbody td {
   padding: 15px 10px;
 }

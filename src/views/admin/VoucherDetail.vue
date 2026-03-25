@@ -8,6 +8,7 @@ const router = useRouter();
 const isEdit = ref(!!props.id);
 
 const voucher = ref({
+  id: null,
   maCode: '',
   kieuGiamGia: 'PERCENT',
   giaTriGiam: 0,

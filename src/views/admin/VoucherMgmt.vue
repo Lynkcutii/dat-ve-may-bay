@@ -19,7 +19,7 @@ const filteredVouchers = computed(() => {
     if (filterData.value.year && y !== parseInt(filterData.value.year)) return false;
 
     return true;
-  });
+  }).sort((a, b) => b.id - a.id);
 });
 
 const handleFilter = (data) => {

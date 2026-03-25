@@ -1,9 +1,14 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
+import { useWishlistStore } from '@/stores/wishlist';
+import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
+const router = useRouter();
+const wishlistStore = useWishlistStore();
+const authStore = useAuthStore();
 const apiBaseUrl = 'http://localhost:8080/api/user'; // Update if needed
 
 const categories = ref([]);
@@ -19,14 +24,23 @@ const fetchData = async () => {
       axios.get(`${apiBaseUrl}/products`)
     ]);
     categories.value = catRes.data;
-    allProducts.value = prodRes.data.map(p => ({
-      id: p.id,
-      name: p.tenSanPham,
-      price: p.giaBanMin, // Now using variants' selling price
-      category: p.danhMuc ? p.danhMuc.ten : 'Khác',
-      isNew: true, // Logic for "new" can be added later
-      image: p.hinhAnhs && p.hinhAnhs.length > 0 ? p.hinhAnhs[0].url : 'https://placehold.co/400x400?text=No+Image'
-    }));
+    allProducts.value = prodRes.data.map(p => {
+      // Backend (ProductResponse) trả về giaBanMin đã được tính khuyến mãi tại UserService
+      const finalPrice = p.giaBanMin;
+      const originalPrice = p.giaGoc;
+      const hasPromotion = finalPrice < originalPrice;
+
+      return {
+        id: p.id,
+        name: p.tenSanPham,
+        price: finalPrice,
+        originalPrice: originalPrice,
+        hasPromotion: hasPromotion,
+        category: p.danhMuc ? p.danhMuc.ten : 'Khác',
+        isNew: true, 
+        image: p.hinhAnhs && p.hinhAnhs.length > 0 ? p.hinhAnhs[0].url : 'https://placehold.co/400x400?text=No+Image'
+      };
+    });
   } catch (error) {
     console.error("Error fetching data:", error);
   } finally {
@@ -36,7 +50,26 @@ const fetchData = async () => {
 
 onMounted(() => {
   fetchData();
+  wishlistStore.fetchWishlist();
 });
+
+const toggleWishlist = async (product) => {
+  if (!authStore.isAuthenticated) {
+    alert('Vui lòng đăng nhập để dùng danh sách yêu thích!');
+    router.push('/login');
+    return;
+  }
+
+  try {
+    await wishlistStore.toggleWishlist(product);
+  } catch (error) {
+    console.error('Error toggling wishlist:', error);
+  }
+};
+
+const handleBagClick = (product) => {
+  router.push(`/product/${product.id}`);
+};
 
 // --- BIẾN LỌC ---
 const maxPrice = ref(5000000);
@@ -168,15 +201,26 @@ watch([maxPrice, selectedCats, searchQuery], () => {
             <div class="product-card card border-0 shadow-sm rounded-4 overflow-hidden h-100">
               <div class="position-relative overflow-hidden img-container">
                 <img :src="product.image" class="card-img-top product-img" :alt="product.name">
-                <div v-if="product.isNew" class="product-badge bg-danger text-white">MỚI</div>
+                <div v-if="product.hasPromotion" class="product-badge bg-danger text-white">
+                  -{{ Math.round((1 - product.price / product.originalPrice) * 100) }}%
+                </div>
+                <div v-else-if="product.isNew" class="product-badge bg-dark text-white">MỚI</div>
                 <div class="product-actions d-none d-md-block">
-                  <button class="btn btn-white btn-sm rounded-circle shadow-sm me-1"><i class="far fa-heart"></i></button>
-                  <button class="btn btn-white btn-sm rounded-circle shadow-sm"><i class="fas fa-shopping-bag"></i></button>
+                  <button class="btn btn-white btn-sm rounded-circle shadow-sm me-1" @click.stop="toggleWishlist(product)">
+                    <i :class="wishlistStore.isInWishlist(product.id) ? 'fas fa-heart text-danger' : 'far fa-heart'"></i>
+                  </button>
+                  <button class="btn btn-white btn-sm rounded-circle shadow-sm" @click.stop="handleBagClick(product)">
+                    <i class="fas fa-shopping-bag"></i>
+                  </button>
                 </div>
               </div>
               <div class="card-body p-2 p-md-3 text-center">
                 <h6 class="fw-bold mb-1 mb-md-2 product-title text-truncate-2">{{ product.name }}</h6>
-                <p class="text-danger fw-bold mb-0 small">{{ formatPrice(product.price) }}</p>
+                <div v-if="product.hasPromotion" class="d-flex flex-column align-items-center">
+                  <span class="text-muted text-decoration-line-through small">{{ formatPrice(product.originalPrice) }}</span>
+                  <span class="text-danger fw-bold small">{{ formatPrice(product.price) }}</span>
+                </div>
+                <p v-else class="text-danger fw-bold mb-0 small">{{ formatPrice(product.price) }}</p>
               </div>
               <router-link :to="'/product/' + product.id" class="stretched-link"></router-link>
             </div>
@@ -207,16 +251,17 @@ watch([maxPrice, selectedCats, searchQuery], () => {
 </template>
 
 <style scoped>
-.product-card { transition: 0.3s; background: #fff; }
+.product-card { transition: 0.3s; background: #fff; position: relative; }
 .product-card:hover { transform: translateY(-8px); box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important; }
 .img-container { height: 180px; }
 @media (min-width: 768px) { .img-container { height: 240px; } }
 
 .product-img { width: 100%; height: 100%; object-fit: cover; transition: 0.5s; }
 .product-card:hover .product-img { transform: scale(1.08); }
-.product-actions { position: absolute; bottom: -50px; left: 0; right: 0; text-align: center; transition: 0.3s; opacity: 0; }
+.product-actions { position: absolute; bottom: -50px; left: 0; right: 0; text-align: center; transition: 0.3s; opacity: 0; z-index: 3; pointer-events: auto; }
 .product-card:hover .product-actions { bottom: 15px; opacity: 1; }
 .btn-white { background: #fff; border: none; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; }
+.btn-white { position: relative; z-index: 4; }
 .product-badge { position: absolute; top: 10px; left: 10px; font-size: 8px; padding: 2px 6px; border-radius: 50px; font-weight: bold; }
 .product-title { font-size: 12px; height: 36px; overflow: hidden; color: #333; line-height: 1.5; }
 @media (min-width: 768px) { .product-title { font-size: 14px; height: 42px; } }
@@ -226,6 +271,10 @@ watch([maxPrice, selectedCats, searchQuery], () => {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.stretched-link {
+  z-index: 1;
 }
 
 .custom-range::-webkit-slider-runnable-track { background: #eee; height: 4px; }

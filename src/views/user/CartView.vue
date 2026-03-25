@@ -22,6 +22,25 @@ const handleUpdateQuantity = async (spctId, delta) => {
   }
 };
 
+const handleManualQuantity = async (spctId, newVal, oldVal) => {
+  if (isNaN(newVal) || newVal < 1) {
+    alert("Số lượng phải lớn hơn hoặc bằng 1");
+    // Re-fetch to reset UI
+    cartStore.fetchCart();
+    return;
+  }
+  
+  const delta = newVal - oldVal;
+  if (delta === 0) return;
+  
+  try {
+    await cartStore.addToCart(spctId, delta);
+  } catch (error) {
+    alert("Lỗi khi cập nhật số lượng: " + (error.response?.data?.message || error.message));
+    cartStore.fetchCart();
+  }
+};
+
 const handleRemoveItem = async (itemId) => {
   if (confirm("Bạn có chắc chắn muốn xóa sản phẩm này khỏi giỏ hàng?")) {
     try {
@@ -103,26 +122,57 @@ const handleCheckout = () => {
                 </td>
                 <td class="product-info-cell">
                   <div class="d-flex align-items-center">
-                    <img :src="item.sanPhamChiTiet.sanPham.hinhAnhs?.[0]?.url || 'https://placehold.co/80x100'" class="rounded-3 me-3" alt="Product" style="width: 80px; height: 100px; object-fit: cover;">
-                    <div>
-                      <h6 class="fw-bold mb-1 small text-truncate-1">{{ item.sanPhamChiTiet.sanPham.tenSanPham }}</h6>
-                      <p class="text-secondary mb-0" style="font-size: 11px;">
-                        SIZE: {{ item.sanPhamChiTiet.kichThuoc.ten }} | MÀU: {{ item.sanPhamChiTiet.mauSac.ten }}
+                    <img :src="item.sanPhamChiTiet?.sanPham?.hinhAnhs?.[0]?.url || 'https://placehold.co/80x100'" class="rounded-3 me-3" alt="Product" style="width: 80px; height: 100px; object-fit: cover;">
+                    <div class="flex-grow-1 min-width-0">
+                      <h6 class="fw-bold mb-1 small text-truncate-1">{{ item.sanPhamChiTiet?.sanPham?.tenSanPham || 'Sản phẩm' }}</h6>
+                      <p class="text-secondary mb-1" style="font-size: 11px;">
+                        SIZE: {{ item.sanPhamChiTiet?.kichThuoc?.ten || 'N/A' }} | MÀU: {{ item.sanPhamChiTiet?.mauSac?.ten || 'N/A' }}
                       </p>
+                      
+                      <!-- Promo Badge -->
+                      <div v-if="item.donGia < item.sanPhamChiTiet?.giaBan" class="mb-1">
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle fw-normal" style="font-size: 9px;">
+                          <i class="fas fa-tag me-1"></i>Đang giảm giá
+                        </span>
+                      </div>
+
                       <!-- Mobile only price -->
-                      <div class="d-md-none mt-1 fw-bold text-danger">{{ formatPrice(item.sanPhamChiTiet.giaBan) }}</div>
+                      <div class="d-md-none mt-1 fw-bold">
+                        <template v-if="item.donGia < item.sanPhamChiTiet?.giaBan">
+                          <span class="text-muted text-decoration-line-through me-2 small fw-normal">{{ formatPrice(item.sanPhamChiTiet.giaBan) }}</span>
+                          <span class="text-danger">{{ formatPrice(item.donGia) }}</span>
+                        </template>
+                        <span v-else class="text-dark">{{ formatPrice(item.sanPhamChiTiet?.giaBan || 0) }}</span>
+                      </div>
                     </div>
                   </div>
                 </td>
-                <td class="d-none d-md-table-cell fw-bold small">{{ formatPrice(item.sanPhamChiTiet.giaBan) }}</td>
+                <td class="d-none d-md-table-cell fw-bold small">
+                  <div v-if="item.donGia < item.sanPhamChiTiet?.giaBan">
+                    <div class="text-muted text-decoration-line-through fw-normal mb-1" style="font-size: 11px;">{{ formatPrice(item.sanPhamChiTiet.giaBan) }}</div>
+                    <div class="text-danger" style="font-size: 13px;">{{ formatPrice(item.donGia) }}</div>
+                    <div class="text-danger-emphasis mt-1" style="font-size: 9px;">
+                      <i class="fas fa-check-circle me-1"></i>Đã áp dụng giá tốt
+                    </div>
+                  </div>
+                  <div v-else style="font-size: 13px;">{{ formatPrice(item.sanPhamChiTiet?.giaBan || 0) }}</div>
+                </td>
                 <td class="quantity-cell">
                   <div class="input-group input-group-sm mx-auto mx-md-0" style="width: 100px;">
                     <button @click="handleUpdateQuantity(item.sanPhamChiTiet.id, -1)" class="btn btn-outline-secondary border shadow-none px-2" :disabled="item.soLuong <= 1"><i class="fas fa-minus small"></i></button>
-                    <input type="text" class="form-control text-center border-top border-bottom fw-bold px-1" :value="item.soLuong" readonly>
+                    <input 
+                      type="number" 
+                      class="form-control text-center border-top border-bottom fw-bold px-1" 
+                      :value="item.soLuong" 
+                      @change="(e) => handleManualQuantity(item.sanPhamChiTiet.id, parseInt(e.target.value), item.soLuong)"
+                      min="1"
+                    >
                     <button @click="handleUpdateQuantity(item.sanPhamChiTiet.id, 1)" class="btn btn-outline-secondary border shadow-none px-2"><i class="fas fa-plus small"></i></button>
                   </div>
                 </td>
-                <td class="d-none d-md-table-cell text-end fw-bold text-danger small">{{ formatPrice(item.sanPhamChiTiet.giaBan * item.soLuong) }}</td>
+                <td class="d-none d-md-table-cell text-end fw-bold text-danger small">
+                  {{ formatPrice((item.donGia || item.sanPhamChiTiet.giaBan) * item.soLuong) }}
+                </td>
                 <td class="text-end text-md-center">
                   <button @click="handleRemoveItem(item.idGhct)" class="btn btn-link text-secondary p-0 shadow-none"><i class="far fa-trash-alt"></i></button>
                 </td>
