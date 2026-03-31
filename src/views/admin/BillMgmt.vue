@@ -1,37 +1,62 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import axios from 'axios';
 import DateFilter from '@/components/DateFilter.vue';
 
+const apiBaseUrl = 'http://localhost:8080/api/admin';
+
 const bills = ref([]);
 const loading = ref(true);
-const apiBaseUrl = 'http://localhost:8080/api/admin';
+const selectedBill = ref(null);
+const billDetail = ref(null);
+const newStatus = ref('');
 
 const filterData = ref({ day: '', month: '', year: '' });
 const filterLoaiDon = ref('');
 const currentPage = ref(1);
 const itemsPerPage = ref(10);
 
-const filteredBills = computed(() => {
-  return bills.value.filter(bill => {
-    // Lọc theo ngày tháng năm
-    if (bill.ngayTao) {
-      const date = new Date(bill.ngayTao);
-      const d = date.getDate();
-      const m = date.getMonth() + 1;
-      const y = date.getFullYear();
+const STATUS_META = {
+  DA_DAT: { text: 'Đã đặt', badge: 'bg-secondary text-white' },
+  CHO_XAC_NHAN: { text: 'Chờ xác nhận', badge: 'bg-info text-white' },
+  DA_XAC_NHAN: { text: 'Đã xác nhận', badge: 'bg-primary text-white' },
+  DANG_GIAO: { text: 'Đang giao', badge: 'bg-warning text-dark' },
+  DA_GIAO: { text: 'Đã giao', badge: 'bg-success text-white' },
+  HOAN_TRA: { text: 'Hoàn trả', badge: 'bg-warning text-dark' },
+  DA_HUY: { text: 'Đã hủy', badge: 'bg-danger text-white' },
+  DA_THANH_TOAN: { text: 'Đã thanh toán', badge: 'bg-success text-white' },
+  CHO_THANH_TOAN: { text: 'Chờ thanh toán', badge: 'bg-warning text-dark' },
+};
 
-      if (filterData.value.day && d !== parseInt(filterData.value.day)) return false;
-      if (filterData.value.month && m !== parseInt(filterData.value.month)) return false;
-      if (filterData.value.year && y !== parseInt(filterData.value.year)) return false;
-    }
+const editableStatuses = [
+  'CHO_XAC_NHAN',
+  'DA_XAC_NHAN',
+  'DANG_GIAO',
+  'DA_GIAO',
+  'HOAN_TRA',
+  'DA_HUY',
+];
 
-    // Lọc theo loại đơn
-    if (filterLoaiDon.value && bill.loaiDonHang !== filterLoaiDon.value) return false;
+const filteredBills = computed(() =>
+  bills.value
+    .filter((bill) => {
+      if (bill.ngayTao) {
+        const date = new Date(bill.ngayTao);
+        const d = date.getDate();
+        const m = date.getMonth() + 1;
+        const y = date.getFullYear();
 
-    return true;
-  }).sort((a, b) => new Date(b.ngayTao) - new Date(a.ngayTao));
-});
+        if (filterData.value.day && d !== Number.parseInt(filterData.value.day, 10)) return false;
+        if (filterData.value.month && m !== Number.parseInt(filterData.value.month, 10)) return false;
+        if (filterData.value.year && y !== Number.parseInt(filterData.value.year, 10)) return false;
+      }
+
+      if (filterLoaiDon.value && bill.loaiDonHang !== filterLoaiDon.value) return false;
+
+      return true;
+    })
+    .sort((a, b) => new Date(b.ngayTao) - new Date(a.ngayTao)),
+);
 
 const totalPages = computed(() => Math.ceil(filteredBills.value.length / itemsPerPage.value));
 
@@ -45,49 +70,51 @@ const handleFilter = (data) => {
   currentPage.value = 1;
 };
 
+const getStatusBadge = (status) => STATUS_META[status]?.badge || 'bg-secondary text-white';
+
+const getStatusText = (status) => STATUS_META[status]?.text || status || 'Không xác định';
+
+const hasBrokenVietnamese = (value) => {
+  if (!value) return false;
+  return /[ÃƒÃ†Ãï¿½]/.test(value) || /\?/.test(value);
+};
+
+const formatSafeText = (value, fallback = 'Không có') => {
+  if (!value) return fallback;
+  return hasBrokenVietnamese(value) ? 'Dữ liệu cũ bị lỗi mã hóa' : value;
+};
+
+const formatCurrency = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
+
+const formatDateTime = (value) => (value ? new Date(value).toLocaleString('vi-VN') : 'Không có');
+
+const formatShippingAddress = (bill) => {
+  if (!bill) return 'Không có';
+
+  const parts = [bill.diaChiChiTiet, bill.xa, bill.huyen, bill.tinh].filter(Boolean);
+  return parts.length ? parts.join(', ') : 'Không có';
+};
+
 const fetchBills = async () => {
   try {
     loading.value = true;
     const res = await axios.get(`${apiBaseUrl}/bills`);
     bills.value = res.data;
   } catch (error) {
-    console.error("Error fetching bills:", error);
+    console.error('Error fetching bills:', error);
   } finally {
     loading.value = false;
   }
 };
 
-onMounted(() => {
-  fetchBills();
-});
-
-const getStatusBadge = (status) => {
-  switch (status) {
-    case 'DA_THANH_TOAN': return 'bg-success';
-    case 'CHO_THANH_TOAN': return 'bg-warning text-dark';
-    case 'DA_HUY': return 'bg-danger';
-    case 'CHO_XAC_NHAN': return 'bg-info text-white';
-    case 'DANG_GIAO': return 'bg-primary';
-    case 'HOAN_THANH': return 'bg-success';
-    default: return 'bg-secondary';
+const fetchBillDetail = async (id) => {
+  try {
+    const res = await axios.get(`${apiBaseUrl}/bills/${id}`);
+    billDetail.value = res.data;
+  } catch (error) {
+    console.error('Error fetching bill detail:', error);
   }
 };
-
-const getStatusText = (status) => {
-  switch (status) {
-    case 'DA_THANH_TOAN': return 'Đã thanh toán';
-    case 'CHO_THANH_TOAN': return 'Chờ thanh toán';
-    case 'DA_HUY': return 'Đã hủy';
-    case 'CHO_XAC_NHAN': return 'Chờ xác nhận';
-    case 'DANG_GIAO': return 'Đang giao';
-    case 'HOAN_THANH': return 'Hoàn thành';
-    default: return status;
-  }
-};
-
-const selectedBill = ref(null);
-const billDetail = ref(null);
-const newStatus = ref('');
 
 const openEditModal = (bill) => {
   selectedBill.value = bill;
@@ -97,29 +124,25 @@ const openEditModal = (bill) => {
 };
 
 const updateStatus = async () => {
+  if (!selectedBill.value || !newStatus.value) return;
+
   try {
     await axios.put(`${apiBaseUrl}/bills/${selectedBill.value.id}/status`, newStatus.value, {
-      headers: { 'Content-Type': 'text/plain' }
+      headers: { 'Content-Type': 'text/plain' },
     });
-    alert("Cập nhật trạng thái thành công!");
-    fetchBills();
-    if (billDetail.value) {
-      fetchBillDetail(selectedBill.value.id);
+
+    await fetchBills();
+
+    if (billDetail.value && billDetail.value.bill?.id === selectedBill.value.id) {
+      await fetchBillDetail(selectedBill.value.id);
     }
+
     const modal = bootstrap.Modal.getInstance(document.getElementById('editStatusModal'));
     if (modal) modal.hide();
+    alert('Cập nhật trạng thái thành công!');
   } catch (error) {
-    console.error("Error updating status:", error);
-    alert("Cập nhật thất bại!");
-  }
-};
-
-const fetchBillDetail = async (id) => {
-  try {
-    const res = await axios.get(`${apiBaseUrl}/bills/${id}`);
-    billDetail.value = res.data;
-  } catch (error) {
-    console.error("Error fetching bill detail:", error);
+    console.error('Error updating status:', error);
+    alert('Cập nhật thất bại!');
   }
 };
 
@@ -129,6 +152,8 @@ const viewDetail = async (bill) => {
   const modal = new bootstrap.Modal(document.getElementById('billDetailModal'));
   modal.show();
 };
+
+onMounted(fetchBills);
 </script>
 
 <template>
@@ -139,7 +164,7 @@ const viewDetail = async (bill) => {
 
     <div class="d-flex justify-content-between align-items-end gap-3 mb-4 flex-wrap">
       <DateFilter @filter="handleFilter" class="mb-0" />
-      
+
       <div class="filter-item">
         <label class="form-label small fw-bold text-muted">Loại Đơn Hàng</label>
         <select v-model="filterLoaiDon" class="form-select border-0 shadow-sm rounded-3" @change="currentPage = 1">
@@ -174,18 +199,26 @@ const viewDetail = async (bill) => {
             <tbody>
               <tr v-for="bill in paginatedBills" :key="bill.id">
                 <td class="ps-4 fw-bold text-danger">{{ bill.maHoaDon }}</td>
-                <td>{{ bill.nguoiDung?.hoTen || bill.tenNguoiNhan }}</td>
+                <td>{{ formatSafeText(bill.tenKhachHang || bill.tenNguoiNhan) }}</td>
                 <td>
                   <span :class="['badge rounded-pill px-2', bill.loaiDonHang === 'ONLINE' ? 'bg-info' : 'bg-warning text-dark']">
                     {{ bill.loaiDonHang === 'ONLINE' ? 'Online' : 'Tại quầy' }}
                   </span>
                 </td>
-                <td>{{ new Date(bill.ngayTao).toLocaleString('vi-VN') }}</td>
-                <td>{{ bill.tongThanhToan?.toLocaleString() }} VNĐ</td>
-                <td><span :class="['badge rounded-pill px-3', getStatusBadge(bill.trangThaiDon)]">{{ getStatusText(bill.trangThaiDon) }}</span></td>
+                <td>{{ formatDateTime(bill.ngayTao) }}</td>
+                <td>{{ `${Number(bill.tongThanhToan || 0).toLocaleString('vi-VN')} VNĐ` }}</td>
+                <td>
+                  <span :class="['badge rounded-pill px-3', getStatusBadge(bill.trangThaiDon)]">
+                    {{ getStatusText(bill.trangThaiDon) }}
+                  </span>
+                </td>
                 <td class="text-end pe-4">
-                  <button class="btn btn-sm btn-outline-dark me-2" @click="viewDetail(bill)"><i class="fas fa-eye"></i></button>
-                  <button class="btn btn-sm btn-outline-primary" @click="openEditModal(bill)"><i class="fas fa-edit"></i></button>
+                  <button class="btn btn-sm btn-outline-dark me-2" @click="viewDetail(bill)">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-primary" @click="openEditModal(bill)">
+                    <i class="fas fa-edit"></i>
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -194,22 +227,24 @@ const viewDetail = async (bill) => {
       </div>
     </div>
 
-    <!-- Phân trang -->
     <nav class="mt-4" v-if="totalPages > 1">
       <ul class="pagination justify-content-center">
         <li class="page-item" :class="{ disabled: currentPage === 1 }">
-          <a class="page-link border-0 shadow-none" href="#" @click.prevent="currentPage--"><i class="fas fa-chevron-left"></i></a>
+          <a class="page-link border-0 shadow-none" href="#" @click.prevent="currentPage--">
+            <i class="fas fa-chevron-left"></i>
+          </a>
         </li>
         <li class="page-item" v-for="page in totalPages" :key="page" :class="{ active: currentPage === page }">
           <a class="page-link border-0 shadow-none" href="#" @click.prevent="currentPage = page">{{ page }}</a>
         </li>
         <li class="page-item" :class="{ disabled: currentPage === totalPages }">
-          <a class="page-link border-0 shadow-none" href="#" @click.prevent="currentPage++"><i class="fas fa-chevron-right"></i></a>
+          <a class="page-link border-0 shadow-none" href="#" @click.prevent="currentPage++">
+            <i class="fas fa-chevron-right"></i>
+          </a>
         </li>
       </ul>
     </nav>
 
-    <!-- Edit Status Modal -->
     <div class="modal fade" id="editStatusModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog">
         <div class="modal-content">
@@ -224,12 +259,9 @@ const viewDetail = async (bill) => {
               <div class="mb-3">
                 <label class="form-label small text-muted">Trạng thái mới</label>
                 <select v-model="newStatus" class="form-select border-0 bg-light">
-                  <option value="CHO_XAC_NHAN">Chờ xác nhận</option>
-                  <option value="DA_XAC_NHAN">Đã xác nhận</option>
-                  <option value="DANG_GIAO">Đang giao</option>
-                  <option value="DA_GIAO">Đã giao</option>
-                  <option value="HOAN_TRA">Hoàn trả</option>
-                  <option value="DA_HUY">Đã hủy</option>
+                  <option v-for="status in editableStatuses" :key="status" :value="status">
+                    {{ getStatusText(status) }}
+                  </option>
                 </select>
               </div>
             </div>
@@ -242,22 +274,22 @@ const viewDetail = async (bill) => {
       </div>
     </div>
 
-    <!-- View Detail Modal -->
     <div class="modal fade" id="billDetailModal" tabindex="-1" aria-hidden="true">
       <div class="modal-dialog modal-lg">
         <div class="modal-content" v-if="billDetail">
           <div class="modal-header border-0">
-            <h5 class="modal-title fw-bold">Chi tiết hóa đơn: <span class="text-danger">{{ billDetail.bill.maHoaDon }}</span></h5>
+            <h5 class="modal-title fw-bold">
+              Chi tiết hóa đơn: <span class="text-danger">{{ billDetail.bill.maHoaDon }}</span>
+            </h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
           <div class="modal-body pt-0">
-            <!-- Order Status Timeline -->
             <div class="mb-4">
               <h6 class="fw-bold mb-3 border-bottom pb-2">Lịch sử đơn hàng</h6>
               <div class="timeline small">
                 <div v-for="history in billDetail.history" :key="history.id" class="d-flex mb-2">
-                  <div class="text-muted me-3" style="min-width: 140px;">
-                    {{ new Date(history.ngayCapNhat).toLocaleString('vi-VN') }}
+                  <div class="text-muted me-3 timeline-date">
+                    {{ formatDateTime(history.ngayCapNhat) }}
                   </div>
                   <div class="fw-bold">
                     <span :class="['badge rounded-pill px-2', getStatusBadge(history.trangThai)]">
@@ -268,22 +300,19 @@ const viewDetail = async (bill) => {
               </div>
             </div>
 
-            <!-- Customer & Shipping Info -->
             <div class="row mb-4">
               <div class="col-md-6">
                 <h6 class="fw-bold mb-3 border-bottom pb-2">Thông tin khách hàng</h6>
-                <p class="mb-1"><strong>Họ tên:</strong> {{ billDetail.bill.tenNguoiNhan }}</p>
-                <p class="mb-1"><strong>Số điện thoại:</strong> {{ billDetail.bill.soDienThoai }}</p>
-                <p class="mb-1"><strong>Ghi chú:</strong> {{ billDetail.bill.ghiChu || 'Không có' }}</p>
+                <p class="mb-1"><strong>Họ tên:</strong> {{ formatSafeText(billDetail.bill.tenNguoiNhan) }}</p>
+                <p class="mb-1"><strong>Số điện thoại:</strong> {{ formatSafeText(billDetail.bill.soDienThoai) }}</p>
+                <p class="mb-1"><strong>Ghi chú:</strong> {{ formatSafeText(billDetail.bill.ghiChu) }}</p>
               </div>
               <div class="col-md-6">
                 <h6 class="fw-bold mb-3 border-bottom pb-2">Địa chỉ giao hàng</h6>
-                <p class="mb-1">{{ billDetail.bill.diaChiChiTiet }}</p>
-                <p class="mb-1">{{ billDetail.bill.xa }}, {{ billDetail.bill.huyen }}, {{ billDetail.bill.tinh }}</p>
+                <p class="mb-1 shipping-address">{{ formatShippingAddress(billDetail.bill) }}</p>
               </div>
             </div>
 
-            <!-- Product Items -->
             <h6 class="fw-bold mb-3 border-bottom pb-2">Danh sách sản phẩm</h6>
             <div class="table-responsive">
               <table class="table table-sm table-hover align-middle">
@@ -302,26 +331,26 @@ const viewDetail = async (bill) => {
                       <div class="text-muted x-small">Phân loại: {{ item.mauSac }}, {{ item.kichThuoc }}, {{ item.chatLieu }}</div>
                     </td>
                     <td class="text-center">{{ item.soLuong }}</td>
-                    <td class="text-end">{{ item.donGia.toLocaleString() }} đ</td>
-                    <td class="text-end fw-bold">{{ item.thanhTien.toLocaleString() }} đ</td>
+                    <td class="text-end">{{ formatCurrency(item.donGia) }}</td>
+                    <td class="text-end fw-bold">{{ formatCurrency(item.thanhTien) }}</td>
                   </tr>
                 </tbody>
                 <tfoot>
                   <tr>
                     <td colspan="3">Tổng tiền hàng:</td>
-                    <td class="text-end">{{ billDetail.bill.tongTienHang.toLocaleString() }} đ</td>
+                    <td class="text-end">{{ formatCurrency(billDetail.bill.tongTienHang) }}</td>
                   </tr>
                   <tr>
                     <td colspan="3">Giảm giá:</td>
-                    <td class="text-end text-danger">-{{ billDetail.bill.tienGiam.toLocaleString() }} đ</td>
+                    <td class="text-end text-danger">-{{ formatCurrency(billDetail.bill.tienGiam) }}</td>
                   </tr>
                   <tr>
                     <td colspan="3">Phí vận chuyển:</td>
-                    <td class="text-end">{{ billDetail.bill.phi_van_chuyen?.toLocaleString() || 0 }} đ</td>
+                    <td class="text-end">{{ formatCurrency(billDetail.bill.phiVanChuyen) }}</td>
                   </tr>
                   <tr>
                     <td colspan="3" class="fw-bold">Tổng thanh toán:</td>
-                    <td class="text-end fw-bold text-danger fs-5">{{ billDetail.bill.tongThanhToan.toLocaleString() }} đ</td>
+                    <td class="text-end fw-bold text-danger fs-5">{{ formatCurrency(billDetail.bill.tongThanhToan) }}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -340,23 +369,36 @@ const viewDetail = async (bill) => {
 </template>
 
 <style scoped>
+.modal-content {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
 .x-small {
   font-size: 0.75rem;
 }
+
 .timeline {
   max-height: 150px;
   overflow-y: auto;
   padding-left: 5px;
 }
-</style>
 
-<style scoped>
+.timeline-date {
+  min-width: 140px;
+}
+
+.shipping-address {
+  line-height: 1.7;
+  word-break: break-word;
+}
+
 .table thead th {
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding: 15px 10px;
 }
+
 .table tbody td {
   padding: 15px 10px;
 }

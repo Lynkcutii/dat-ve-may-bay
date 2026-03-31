@@ -4,12 +4,13 @@ import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 import { useWishlistStore } from '@/stores/wishlist';
 import { useAuthStore } from '@/stores/auth';
+import { API_BASE_URL } from '@/config';
 
 const route = useRoute();
 const router = useRouter();
 const wishlistStore = useWishlistStore();
 const authStore = useAuthStore();
-const apiBaseUrl = 'http://localhost:8080/api/user'; // Update if needed
+const apiBaseUrl = `${API_BASE_URL}/api/user`; 
 
 const categories = ref([]);
 const allProducts = ref([]);

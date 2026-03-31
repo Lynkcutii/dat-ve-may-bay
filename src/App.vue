@@ -29,8 +29,18 @@ const isAdminPage = computed(() => route.path.startsWith('/admin'))
 
 <style>
 body { 
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: 'Montserrat', 'Inter', 'Segoe UI', 'Noto Sans', Arial, sans-serif;
   background-color: #f8f9fa;
+  color: #333;
+}
+
+h1, h2, h3, h4, h5, h6, .fw-bold {
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 700 !important;
+}
+
+.btn {
+  font-family: 'Montserrat', sans-serif;
 }
 
 /* Utility classes for responsive spacing */

@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
@@ -99,7 +99,7 @@ const fetchTinh = async () => {
     const res = await axios.get(`${apiBaseUrl}/regions/tinh`);
     tinhs.value = res.data || [];
   } catch (error) {
-    console.error('Error fetching provinces:', error);
+    console.error('Error fetching tinh:', error);
   }
 };
 
@@ -108,13 +108,11 @@ const fetchHuyen = async (tinhId) => {
     huyens.value = [];
     return;
   }
-
   try {
     const res = await axios.get(`${apiBaseUrl}/regions/huyen/${tinhId}`);
     huyens.value = res.data || [];
   } catch (error) {
-    console.error('Error fetching districts:', error);
-    huyens.value = [];
+    console.error('Error fetching huyen:', error);
   }
 };
 
@@ -123,40 +121,62 @@ const fetchXa = async (huyenId) => {
     xas.value = [];
     return;
   }
-
   try {
     const res = await axios.get(`${apiBaseUrl}/regions/xa/${huyenId}`);
     xas.value = res.data || [];
   } catch (error) {
-    console.error('Error fetching wards:', error);
-    xas.value = [];
+    console.error('Error fetching xa:', error);
   }
 };
 
-const openRegionPanel = () => {
+const ensureRegionOptions = async (tab = regionTab.value) => {
+  if (tinhs.value.length === 0) {
+    await fetchTinh();
+  }
+
+  if (tab === 'huyen' && addressForm.value.tinhId && huyens.value.length === 0) {
+    await fetchHuyen(addressForm.value.tinhId);
+  }
+
+  if (tab === 'xa' && addressForm.value.huyenId && xas.value.length === 0) {
+    await fetchXa(addressForm.value.huyenId);
+  }
+};
+
+const setRegionTab = async (tab) => {
+  regionTab.value = tab;
+  regionKeyword.value = '';
+  await ensureRegionOptions(tab);
+};
+
+const openRegionPanel = async () => {
   regionPanelOpen.value = true;
   regionKeyword.value = '';
   if (!addressForm.value.tinhId) {
     regionTab.value = 'tinh';
+    await ensureRegionOptions('tinh');
     return;
   }
   if (!addressForm.value.huyenId) {
     regionTab.value = 'huyen';
+    await ensureRegionOptions('huyen');
     return;
   }
   if (!addressForm.value.xaId) {
     regionTab.value = 'xa';
+    await ensureRegionOptions('xa');
     return;
   }
   regionTab.value = 'xa';
+  await ensureRegionOptions('xa');
 };
 
-const toggleRegionPanel = () => {
+const toggleRegionPanel = async () => {
   if (regionPanelOpen.value) {
     regionPanelOpen.value = false;
     return;
   }
-  openRegionPanel();
+  await openRegionPanel();
 };
 
 const selectTinh = async (tinh) => {
@@ -166,6 +186,7 @@ const selectTinh = async (tinh) => {
   addressForm.value.huyenText = '';
   addressForm.value.xaId = '';
   addressForm.value.xaText = '';
+  huyens.value = [];
   xas.value = [];
   regionKeyword.value = '';
   await fetchHuyen(tinh.id);
@@ -177,6 +198,7 @@ const selectHuyen = async (huyen) => {
   addressForm.value.huyenText = huyen.tenHuyen;
   addressForm.value.xaId = '';
   addressForm.value.xaText = '';
+  xas.value = [];
   regionKeyword.value = '';
   await fetchXa(huyen.id);
   regionTab.value = 'xa';
@@ -244,10 +266,15 @@ const openEditAddress = async (addr) => {
     laMacDinh: !!addr.isDefault
   };
 
-  await fetchHuyen(addressForm.value.tinhId);
-  await fetchXa(addressForm.value.huyenId);
+  if (addressForm.value.tinhId) {
+    await fetchHuyen(addressForm.value.tinhId);
+  }
+  if (addressForm.value.huyenId) {
+    await fetchXa(addressForm.value.huyenId);
+  }
+  
   regionPanelOpen.value = false;
-  regionTab.value = addressForm.value.xaId ? 'xa' : addressForm.value.huyenId ? 'huyen' : 'tinh';
+  regionTab.value = addressForm.value.xaId ? 'xa' : (addressForm.value.huyenId ? 'xa' : (addressForm.value.tinhId ? 'huyen' : 'tinh'));
   regionKeyword.value = '';
   showAddressModal.value = true;
 };
@@ -390,7 +417,7 @@ onMounted(async () => {
       <div class="col-lg-9">
         <div class="bg-white rounded-4 shadow-sm p-5 h-100">
           <div v-if="activeTab === 'info'">
-            <h4 class="fw-bold mb-4">Thông Tin Tài Khoản</h4>
+            <h4 class="fw-bold mb-4">Thông tin tài khoản</h4>
 
             <form class="row g-4" @submit.prevent="handleUpdateProfile">
               <div class="col-md-6">
@@ -436,7 +463,7 @@ onMounted(async () => {
 
           <div v-if="activeTab === 'address'">
             <div class="d-flex justify-content-between align-items-center mb-4">
-              <h4 class="fw-bold mb-0">Sổ Địa Chỉ</h4>
+              <h4 class="fw-bold mb-0">Sổ địa chỉ</h4>
               <button class="btn btn-dark rounded-pill px-4 fw-bold small" @click="openAddAddress">
                 <i class="fas fa-plus me-2"></i> THÊM ĐỊA CHỈ MỚI
               </button>
@@ -520,7 +547,7 @@ onMounted(async () => {
                     type="button"
                     class="region-tab"
                     :class="{ active: regionTab === 'tinh' }"
-                    @click="regionTab = 'tinh'; regionKeyword = ''"
+                    @click="setRegionTab('tinh')"
                   >
                     Tỉnh/Thành phố
                   </button>
@@ -529,7 +556,7 @@ onMounted(async () => {
                     class="region-tab"
                     :class="{ active: regionTab === 'huyen' }"
                     :disabled="!addressForm.tinhId"
-                    @click="regionTab = 'huyen'; regionKeyword = ''"
+                    @click="setRegionTab('huyen')"
                   >
                     Quận/Huyện
                   </button>
@@ -538,7 +565,7 @@ onMounted(async () => {
                     class="region-tab"
                     :class="{ active: regionTab === 'xa' }"
                     :disabled="!addressForm.huyenId"
-                    @click="regionTab = 'xa'; regionKeyword = ''"
+                    @click="setRegionTab('xa')"
                   >
                     Phường/Xã
                   </button>
@@ -549,7 +576,7 @@ onMounted(async () => {
                     v-model="regionKeyword"
                     type="text"
                     class="form-control border-0 shadow-none"
-                    :placeholder="regionTab === 'tinh' ? 'Tìm tỉnh/thành phố' : regionTab === 'huyen' ? 'Tìm quận/huyện' : 'Tìm phường/xã'"
+                    :placeholder="regionTab === 'tinh' ? 'Tìm tỉnh/thành phố' : (regionTab === 'huyen' ? 'Tìm quận/huyện' : 'Tìm phường/xa')"
                   >
                 </div>
 
@@ -762,3 +789,5 @@ onMounted(async () => {
   color: #7a7a7a;
 }
 </style>
+
+

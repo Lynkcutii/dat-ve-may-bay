@@ -93,6 +93,7 @@ import { useRouter, useRoute } from 'vue-router';
 import axios from 'axios';
 import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
+import { API_BASE_URL } from '@/config';
 
 const cartStore = useCartStore();
 const authStore = useAuthStore();
@@ -108,7 +109,7 @@ onMounted(() => {
   fetchOrders();
   if (route.query.payment === 'success') {
     alert('Thanh toán thành công!');
-    cartStore.selectedItemIds = [];
+    cartStore.clearSelected();
   } else if (route.query.payment === 'failed') {
     alert('Thanh toán thất bại hoặc đã bị hủy.');
   }
@@ -140,7 +141,7 @@ const fetchOrders = async () => {
   }
   loading.value = true;
   try {
-    const res = await axios.get(`http://localhost:8080/api/user/orders/${cartStore.userId}`);
+    const res = await axios.get(`${API_BASE_URL}/api/user/orders/${cartStore.userId}`);
     // Sắp xếp đơn hàng mới nhất lên đầu (dựa vào id hoặc ngayTao)
     orders.value = res.data.sort((a, b) => b.id - a.id);
   } catch (error) {

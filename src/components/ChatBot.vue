@@ -1,6 +1,7 @@
 <script setup>
 import { ref, nextTick } from 'vue';
-import axios from 'axios'; // Đảm bảo đã cài axios: npm install axios
+import axios from 'axios'; 
+import { API_BASE_URL } from '@/config';
 import capyImage from '@/img/capy.jpg';
 
 const isChatOpen = ref(false);
@@ -22,7 +23,7 @@ const sendMessage = async () => {
 
   try {
     // Gọi đến Backend Spring Boot
-    const res = await axios.post('http://localhost:8080/api/chatbot/chat', {
+    const res = await axios.post(`${API_BASE_URL}/api/chatbot/chat`, {
       message: userText
     });
 

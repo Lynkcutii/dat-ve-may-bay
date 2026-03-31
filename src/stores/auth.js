@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import axios from 'axios';
+import { API_BASE_URL } from '@/config';
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -17,7 +18,7 @@ export const useAuthStore = defineStore('auth', {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.post('http://localhost:8080/api/auth/login', {
+        const response = await axios.post(`${API_BASE_URL}/api/auth/login`, {
           identifier,
           password
         });
@@ -35,7 +36,7 @@ export const useAuthStore = defineStore('auth', {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.post('http://localhost:8080/api/auth/register', userData);
+        const response = await axios.post(`${API_BASE_URL}/api/auth/register`, userData);
         return response.data;
       } catch (err) {
         this.error = err.response?.data || 'Registration failed';
@@ -48,7 +49,7 @@ export const useAuthStore = defineStore('auth', {
       this.loading = true;
       this.error = null;
       try {
-        const response = await axios.post('http://localhost:8080/api/auth/forgot-password', {
+        const response = await axios.post(`${API_BASE_URL}/api/auth/forgot-password`, {
           email,
           newPassword
         });
@@ -67,7 +68,7 @@ export const useAuthStore = defineStore('auth', {
     async updateProfile(userId, userData) {
       this.loading = true;
       try {
-        const response = await axios.put(`http://localhost:8080/api/user/profile/${userId}`, userData);
+        const response = await axios.put(`${API_BASE_URL}/api/user/profile/${userId}`, userData);
         this.user = response.data;
         localStorage.setItem('user', JSON.stringify(this.user));
         return this.user;
@@ -80,7 +81,7 @@ export const useAuthStore = defineStore('auth', {
     async changePassword(userId, passwords) {
       this.loading = true;
       try {
-        const response = await axios.post(`http://localhost:8080/api/user/change-password/${userId}`, passwords);
+        const response = await axios.post(`${API_BASE_URL}/api/user/change-password/${userId}`, passwords);
         return response.data;
       } catch (err) {
         throw err.response?.data || 'Change password failed';

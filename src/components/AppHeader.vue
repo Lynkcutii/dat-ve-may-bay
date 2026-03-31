@@ -177,16 +177,18 @@ onMounted(() => {
 <style scoped>
 /* KHUNG HEADER */
 .main-header {
-  height: 80px;
-  box-shadow: 0 2px 15px rgba(0,0,0,0.1);
-  background: #305a78;
+  height: 84px;
+  box-shadow: 0 14px 40px rgba(12, 33, 49, 0.12);
+  background: linear-gradient(135deg, rgba(12, 37, 56, 0.96), rgba(20, 94, 105, 0.92));
+  backdrop-filter: blur(14px);
   z-index: 1030;
 }
 
 .logo-img {
-  height: 60px;
+  height: 54px;
   width: auto;
   display: block;
+  filter: drop-shadow(0 10px 20px rgba(7, 19, 29, 0.2));
 }
 
 /* MENU CHÍNH */
@@ -194,7 +196,7 @@ onMounted(() => {
   display: flex;
   list-style: none;
   align-items: center;
-  gap: 30px;
+  gap: 34px;
 }
 
 .menu-link {
@@ -202,15 +204,16 @@ onMounted(() => {
   color: #fff !important;
   font-weight: 700;
   font-size: 14px;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.08em;
   white-space: nowrap;
   padding: 10px 0;
   display: block;
-  transition: 0.3s;
+  transition: color 0.3s ease, transform 0.3s ease;
 }
 
 .menu-link:hover {
-  color: #ffc107 !important;
+  color: #8ff3d2 !important;
+  transform: translateY(-1px);
 }
 
 /* HIỆU ỨNG HOVER SẢN PHẨM */
@@ -220,14 +223,15 @@ onMounted(() => {
 
 .submenu-box {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 12px);
   left: 50%;
   transform: translateX(-50%) translateY(15px);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.98);
   min-width: 200px;
   list-style: none;
   padding: 15px 0;
-  border-radius: 8px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 36, 52, 0.08);
   opacity: 0;
   visibility: hidden;
   transition: all 0.3s ease;
@@ -253,26 +257,33 @@ onMounted(() => {
 
 .submenu-box li a:hover {
   background: #f8f9fa;
-  color: #dc3545;
+  color: #0a6c63;
   padding-left: 30px;
 }
 
 /* THANH SEARCH & ICONS */
 .search-box {
-  background: rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.08);
   border-radius: 50px;
-  padding: 7px 18px;
+  padding: 10px 18px;
   display: flex;
   align-items: center;
-  border: 1px solid rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.16);
+  transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
+}
+
+.search-box:focus-within {
+  background: rgba(255,255,255,0.14);
+  border-color: rgba(143, 243, 210, 0.42);
+  transform: translateY(-1px);
 }
 
 .search-box input {
   border: none;
   background: transparent;
   outline: none;
-  font-size: 12px;
-  width: 140px;
+  font-size: 13px;
+  width: 150px;
   color: #fff;
 }
 .search-box input::placeholder { color: rgba(255,255,255,0.6); }
@@ -282,16 +293,16 @@ onMounted(() => {
   color: #fff;
   font-size: 20px;
   text-decoration: none;
-  transition: 0.3s;
+  transition: color 0.25s ease, transform 0.25s ease;
 }
 
-.icon-item:hover { color: #ffc107; transform: translateY(-2px); }
+.icon-item:hover { color: #8ff3d2; transform: translateY(-2px); }
 
 .cart-badge {
   position: absolute;
   top: -8px;
   right: -10px;
-  background: #dc3545;
+  background: linear-gradient(135deg, #ff725e, #ff4d6d);
   color: #fff;
   font-size: 9px;
   padding: 2px 6px;
@@ -324,7 +335,7 @@ onMounted(() => {
   height: 100vh;
   z-index: 1050;
   transition: 0.3s;
-  box-shadow: 5px 0 15px rgba(0,0,0,0.1);
+  box-shadow: 16px 0 40px rgba(0,0,0,0.14);
 }
 .mobile-menu-content.show {
   left: 0;
@@ -337,14 +348,15 @@ onMounted(() => {
 
 .user-submenu {
   position: absolute;
-  top: 100%;
+  top: calc(100% + 12px);
   right: 0;
   transform: translateY(15px);
   background: #fff;
   min-width: 160px;
   list-style: none;
   padding: 10px 0;
-  border-radius: 8px;
+  border-radius: 18px;
+  border: 1px solid rgba(15, 36, 52, 0.08);
   opacity: 0;
   visibility: hidden;
   transition: all 0.3s ease;
@@ -369,12 +381,12 @@ onMounted(() => {
 
 .user-submenu li a:hover {
   background: #f8f9fa;
-  color: #dc3545;
+  color: #0a6c63;
 }
 
 /* RESPONSIVE */
 @media (max-width: 991px) {
-  .main-header { height: 70px; }
+  .main-header { height: 74px; }
   .logo-img { height: 40px; }
 }
 </style>

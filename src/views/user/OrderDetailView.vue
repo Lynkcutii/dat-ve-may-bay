@@ -176,6 +176,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
+import { API_BASE_URL } from '@/config';
 
 const route = useRoute();
 const router = useRouter();
@@ -195,7 +196,7 @@ const steps = [
 const fetchOrder = async () => {
   loading.value = true;
   try {
-    const res = await axios.get(`http://localhost:8080/api/user/order/${route.params.id}`);
+    const res = await axios.get(`${API_BASE_URL}/api/user/order/${route.params.id}`);
     if (res.data) {
       order.value = res.data.bill;
       orderDetails.value = res.data.items;
@@ -210,7 +211,7 @@ const fetchOrder = async () => {
 const handleCancelOrder = async () => {
   if (confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) {
     try {
-      await axios.post(`http://localhost:8080/api/user/order/${order.value.id}/cancel`);
+      await axios.post(`${API_BASE_URL}/api/user/order/${order.value.id}/cancel`);
       alert("Đã hủy đơn hàng thành công");
       fetchOrder();
     } catch (error) {

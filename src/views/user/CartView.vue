@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router';
 
 const cartStore = useCartStore();
 const router = useRouter();
+const SHIPPING_FEE = 30000;
 
 onMounted(() => {
   cartStore.fetchCart();
@@ -53,6 +54,11 @@ const handleRemoveItem = async (itemId) => {
 
 const isAllSelected = computed(() => {
   return cartStore.items.length > 0 && cartStore.selectedItemIds.length === cartStore.items.length;
+});
+
+const cartTotal = computed(() => {
+  if (cartStore.selectedItemIds.length === 0) return 0;
+  return cartStore.selectedTotalPrice + SHIPPING_FEE;
 });
 
 const handleToggleAll = (event) => {
@@ -178,17 +184,17 @@ const handleCheckout = () => {
                 </td>
               </tr>
             </tbody>
-          </table>
+            </table>
+          </div>
         </div>
+          
+        <router-link to="/products" class="btn btn-link text-dark text-decoration-none mt-4 p-0 small fw-bold d-inline-block">
+          <i class="fas fa-arrow-left me-2"></i> TIẾP TỤC MUA SẮM
+        </router-link>
       </div>
-        
-      <router-link to="/products" class="btn btn-link text-dark text-decoration-none mt-4 p-0 small fw-bold d-inline-block">
-        <i class="fas fa-arrow-left me-2"></i> TIẾP TỤC MUA SẮM
-      </router-link>
-    </div>
 
-    <!-- Summary -->
-    <div class="col-lg-4">
+      <!-- Summary -->
+      <div class="col-lg-4">
         <div class="bg-white rounded-4 shadow-sm p-4 sticky-top" style="top: 100px;">
           <h5 class="fw-bold mb-4">TỔNG ĐƠN HÀNG</h5>
           <div class="d-flex justify-content-between mb-3 small">
@@ -201,12 +207,12 @@ const handleCheckout = () => {
           </div>
           <div class="d-flex justify-content-between mb-3 small">
             <span class="text-secondary">Phí vận chuyển:</span>
-            <span class="fw-bold">Miễn phí</span>
+            <span class="fw-bold">{{ formatPrice(SHIPPING_FEE) }}</span>
           </div>
           <hr>
           <div class="d-flex justify-content-between mb-4">
             <span class="fw-bold text-uppercase">Tổng cộng:</span>
-            <span class="fw-bold text-danger fs-5">{{ formatPrice(cartStore.selectedTotalPrice) }}</span>
+            <span class="fw-bold text-danger fs-5">{{ formatPrice(cartTotal) }}</span>
           </div>
           <button @click="handleCheckout" class="btn btn-dark w-100 rounded-pill py-3 fw-bold mb-3 shadow text-decoration-none d-block text-center border-0">THANH TOÁN NGAY</button>
           <div class="text-center pt-2">

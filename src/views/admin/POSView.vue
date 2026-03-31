@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
 
@@ -121,17 +121,6 @@ const loadApplicableVouchers = async (invoiceId) => {
   }
 }
 
-const activeInvoiceHasPromotions = computed(() => {
-  if (!activeInvoice.value?.cart) return false;
-  return activeInvoice.value.cart.some(item => Number(item.donGia || 0) < Number(item.sanPhamChiTiet?.giaBan || Infinity));
-});
-
-const canApplyVoucher = (voucher) => {
-  if (!voucher || !activeInvoiceHasPromotions.value) return false;
-  return applicableVouchers.value.some(v => v.maCode === voucher.maCode);
-};
-
-
 // Variant selection modal state
 const variantModalVisible = ref(false);
 const selectedProduct = ref(null);
@@ -159,17 +148,13 @@ const computeInvoiceSummary = (invoice, cartItems) => {
 
   const itemDiscount = Math.max(0, originalTotal - subTotal);
 
-  const promoItemTotal = cartItems
-    .filter(item => Number(item.donGia || 0) < Number(item.sanPhamChiTiet?.giaBan || Infinity))
-    .reduce((sum, item) => sum + Number(item.donGia || 0) * Number(item.soLuong || 0), 0);
-
   let voucherDiscount = 0;
-  if (invoice?.voucher && promoItemTotal > 0) {
-    voucherDiscount = computeVoucherDiscount(invoice.voucher, promoItemTotal);
+  if (invoice?.voucher && subTotal > 0) {
+    voucherDiscount = computeVoucherDiscount(invoice.voucher, subTotal);
     if (invoice.voucher.giaTriGiamToiDa) {
       voucherDiscount = Math.min(voucherDiscount, Number(invoice.voucher.giaTriGiamToiDa));
     }
-    voucherDiscount = Math.min(voucherDiscount, promoItemTotal);
+    voucherDiscount = Math.min(voucherDiscount, subTotal);
   }
 
   const discount = Math.max(0, itemDiscount + voucherDiscount);
@@ -354,23 +339,16 @@ const selectVoucher = async (voucher) => {
     if (!activeInvoice.value) return;
 
     if (!voucher || !voucher.maCode) {
-      if (activeInvoice.value) {
-        activeInvoice.value.voucher = null;
-        const details = computeInvoiceSummary(activeInvoice.value, activeInvoice.value.cart || []);
-        activeInvoice.value.subTotal = details.subTotal;
-        activeInvoice.value.discount = details.discount;
-        activeInvoice.value.total = details.total;
-      }
-      return;
-    }
-
-    if (!activeInvoiceHasPromotions.value) {
-      alert('Voucher chỉ áp dụng khi có sản phẩm trong đợt giảm giá');
+      activeInvoice.value.voucher = null;
+      const details = computeInvoiceSummary(activeInvoice.value, activeInvoice.value.cart || []);
+      activeInvoice.value.subTotal = details.subTotal;
+      activeInvoice.value.discount = details.discount;
+      activeInvoice.value.total = details.total;
       return;
     }
 
     if (!applicableVouchers.value.some(v => v.maCode === voucher.maCode)) {
-      alert('Voucher này chưa hợp lệ cho sản phẩm đã chọn');
+      alert('Voucher này chưa hợp lệ cho đơn hàng đã chọn');
       return;
     }
 
@@ -378,14 +356,13 @@ const selectVoucher = async (voucher) => {
       params: { voucherCode: voucher.maCode }
     });
 
-
     activeInvoice.value.voucher = voucher;
     const details = computeInvoiceSummary(activeInvoice.value, activeInvoice.value.cart || []);
     activeInvoice.value.subTotal = details.subTotal;
     activeInvoice.value.discount = details.discount;
     activeInvoice.value.total = details.total;
   } catch (error) {
-    alert(error.response?.data?.message || "Lỗi khi áp dụng voucher!");
+    alert(error.response?.data?.message || 'Lỗi khi áp dụng voucher!');
   }
 };
 
@@ -406,7 +383,8 @@ const confirmPayment = async () => {
     await axios.post(`http://localhost:8080/api/admin/pos/invoices/${activeInvoice.value.id}/checkout`, null, {
       params: { 
         paymentMethodId: ptttId, 
-        note: selectedPaymentMethod.value === 'CASH' ? "Thanh toán tiền mặt tại quầy" : "Thanh toán chuyển khoản VietQR" 
+        note: selectedPaymentMethod.value === 'CASH' ? "Thanh toán tiền mặt tại quầy" : "Thanh toán chuyển khoản VietQR",
+        voucherCode: activeInvoice.value.voucher?.maCode || null
       }
     });
     alert("Thanh toán thành công!");
@@ -765,7 +743,7 @@ const filteredCustomers = computed(() => {
                   <i class="fas fa-chevron-down small opacity-50"></i>
                 </button>
                 <ul class="dropdown-menu w-100 shadow-lg border-0 rounded-3 mt-1">
-                  <li v-if="applicableVouchers.length === 0" class="px-3 py-2 text-center text-muted small">Không có voucher hợp lệ cho sản phẩm trong đợt giảm giá</li>
+                  <li v-if="applicableVouchers.length === 0" class="px-3 py-2 text-center text-muted small">Không có voucher hợp lệ cho đơn hàng này</li>
                   <li v-for="v in applicableVouchers" :key="v.id">
                     <a class="dropdown-item p-3" href="#" @click.prevent="selectVoucher(v)">
                       <div class="d-flex justify-content-between">
@@ -1109,3 +1087,9 @@ const filteredCustomers = computed(() => {
   opacity: 1 !important;
 }
 </style>
+
+
+
+
+
+

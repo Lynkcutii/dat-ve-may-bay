@@ -3,11 +3,12 @@ import { ref, onMounted, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 import { useCartStore } from '@/stores/cart';
+import { API_BASE_URL } from '@/config';
 
 const route = useRoute();
 const router = useRouter();
 const cartStore = useCartStore();
-const apiBaseUrl = 'http://localhost:8080/api/user';
+const apiBaseUrl = `${API_BASE_URL}/api/user`;
 
 const product = ref(null);
 const variants = ref([]);

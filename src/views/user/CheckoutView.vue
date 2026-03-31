@@ -4,6 +4,7 @@ import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
+import { API_BASE_URL } from '@/config';
 
 const cartStore = useCartStore();
 const authStore = useAuthStore();
@@ -27,6 +28,18 @@ const orderInfo = ref({
   ghiChu: ''
 });
 
+const hasAddressRegionData = (address) => Boolean(address?.tinh && address?.huyen && address?.xa);
+
+const applyAddressToOrderInfo = (address) => {
+  if (!address) return;
+  orderInfo.value.tenNguoiNhan = address.tenNguoiNhan || orderInfo.value.tenNguoiNhan;
+  orderInfo.value.soDienThoai = address.soDienThoai || orderInfo.value.soDienThoai;
+  orderInfo.value.tinh = address.tinh || '';
+  orderInfo.value.huyen = address.huyen || '';
+  orderInfo.value.xa = address.xa || '';
+  orderInfo.value.diaChiChiTiet = address.diaChiChiTiet || orderInfo.value.diaChiChiTiet;
+};
+
 onMounted(async () => {
   if (cartStore.selectedItemIds.length === 0) {
     router.push('/cart');
@@ -41,17 +54,16 @@ const fetchSavedAddresses = async () => {
   if (!authStore.currentUser?.id) return;
 
   try {
-    const res = await axios.get(`http://localhost:8080/api/user/addresses/${authStore.currentUser.id}`);
+    const res = await axios.get(`${API_BASE_URL}/api/user/addresses/${authStore.currentUser.id}`);
     savedAddresses.value = res.data || [];
 
-    const defaultAddress = savedAddresses.value.find(addr => addr.laMacDinh) || savedAddresses.value[0];
+    const defaultAddress =
+      savedAddresses.value.find(addr => addr.laMacDinh && hasAddressRegionData(addr)) ||
+      savedAddresses.value.find(addr => hasAddressRegionData(addr)) ||
+      savedAddresses.value.find(addr => addr.laMacDinh) ||
+      savedAddresses.value[0];
     if (defaultAddress) {
-      orderInfo.value.tenNguoiNhan = defaultAddress.tenNguoiNhan || orderInfo.value.tenNguoiNhan;
-      orderInfo.value.soDienThoai = defaultAddress.soDienThoai || orderInfo.value.soDienThoai;
-      orderInfo.value.tinh = defaultAddress.tinh || '';
-      orderInfo.value.huyen = defaultAddress.huyen || '';
-      orderInfo.value.xa = defaultAddress.xa || '';
-      orderInfo.value.diaChiChiTiet = defaultAddress.diaChiChiTiet || orderInfo.value.diaChiChiTiet;
+      applyAddressToOrderInfo(defaultAddress);
     }
   } catch (error) {
     console.error("Error fetching addresses:", error);
@@ -69,7 +81,7 @@ const formatSavedAddress = (address) => {
 
 const fetchPaymentMethods = async () => {
   try {
-    const res = await axios.get('http://localhost:8080/api/user/payment-methods');
+    const res = await axios.get(`${API_BASE_URL}/api/user/payment-methods`);
     paymentMethods.value = res.data;
     if (paymentMethods.value.length > 0) {
       selectedPaymentMethodId.value = paymentMethods.value[0].id; // Default to first
@@ -81,7 +93,7 @@ const fetchPaymentMethods = async () => {
 
 const fetchVouchers = async () => {
   try {
-    const res = await axios.get('http://localhost:8080/api/user/vouchers');
+    const res = await axios.get(`${API_BASE_URL}/api/user/vouchers`);
     vouchers.value = res.data;
   } catch (error) {
     console.error("Error fetching vouchers:", error);
@@ -109,6 +121,10 @@ const discountAmount = computed(() => {
 });
 
 const shippingFee = ref(30000);
+const hasIncompleteSavedAddress = computed(() => savedAddresses.value.length > 0 && !hasAddressRegionData(savedAddresses.value[0]));
+const getOriginalUnitPrice = (item) => Number(item?.sanPhamChiTiet?.giaBan || item?.donGia || 0);
+const getSaleUnitPrice = (item) => Number(item?.donGia || item?.sanPhamChiTiet?.giaBan || 0);
+const hasPromotion = (item) => getSaleUnitPrice(item) < getOriginalUnitPrice(item);
 
 const total = computed(() => {
   return Math.max(0, subTotal.value + shippingFee.value - discountAmount.value);
@@ -166,7 +182,7 @@ const handlePlaceOrder = async () => {
     };
       console.log("Dữ liệu gửi lên BE:", request); 
 
-    const res = await axios.post('http://localhost:8080/api/user/order/create', request);
+    const res = await axios.post(`${API_BASE_URL}/api/user/order/create`, request);
     const { hoaDon, paymentUrl } = res.data;
     
     if (paymentUrl) {
@@ -206,6 +222,9 @@ const handlePlaceOrder = async () => {
               <router-link to="/account" class="btn btn-sm btn-outline-dark rounded-pill px-3 fw-bold">
                 Sổ địa chỉ
               </router-link>
+            </div>
+            <div v-if="hasIncompleteSavedAddress" class="mt-3 small text-danger">
+              Địa chỉ đang lưu trong DB chưa có đủ Tỉnh/Thành, Quận/Huyện, Phường/Xã. Hãy vào Sổ địa chỉ để cập nhật lại địa chỉ.
             </div>
           </div>
           <form class="row g-3">
@@ -280,7 +299,14 @@ const handlePlaceOrder = async () => {
                 <h6 class="fw-bold mb-0 small">{{ item.sanPhamChiTiet?.sanPham?.tenSanPham || 'Sản phẩm' }}</h6>
                 <p class="text-secondary small mb-0">SIZE: {{ item.sanPhamChiTiet?.kichThuoc?.ten || 'N/A' }} | MÀU: {{ item.sanPhamChiTiet?.mauSac?.ten || 'N/A' }}</p>
               </div>
-              <div class="fw-bold small">{{ formatPrice((item.donGia || item.sanPhamChiTiet?.giaBan || 0) * item.soLuong) }}</div>
+              <div class="text-end">
+                <div v-if="hasPromotion(item)" class="text-muted text-decoration-line-through small">
+                  {{ formatPrice(getOriginalUnitPrice(item) * item.soLuong) }}
+                </div>
+                <div class="fw-bold small" :class="{ 'text-danger': hasPromotion(item) }">
+                  {{ formatPrice(getSaleUnitPrice(item) * item.soLuong) }}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -341,25 +367,28 @@ const handlePlaceOrder = async () => {
             </div>
             <div class="d-flex justify-content-between mb-2 small">
               <span class="text-secondary">Phí vận chuyển:</span>
-              <span class="fw-bold">{{ shippingFee === 0 ? 'Miễn phí' : formatPrice(shippingFee) }}</span>
+              <span class="fw-bold">{{ formatPrice(shippingFee) }}</span>
             </div>
-            <div class="d-flex justify-content-between small text-success" v-if="discountAmount > 0">
-              <span>Giảm giá:</span>
-              <span class="fw-bold">-{{ formatPrice(discountAmount) }}</span>
+            <div v-if="discountAmount > 0" class="d-flex justify-content-between mb-2 small">
+              <span class="text-secondary">Giảm giá:</span>
+              <span class="fw-bold text-danger">-{{ formatPrice(discountAmount) }}</span>
+            </div>
+            <div class="d-flex justify-content-between mt-3">
+              <h5 class="fw-bold mb-0">TỔNG CỘNG:</h5>
+              <h5 class="fw-bold text-danger mb-0">{{ formatPrice(total) }}</h5>
             </div>
           </div>
 
-          <div class="d-flex justify-content-between mb-4">
-            <span class="fw-bold text-uppercase fs-5">Tổng cộng:</span>
-            <span class="fw-bold text-danger fs-4">{{ formatPrice(total) }}</span>
-          </div>
-
-          <button @click="handlePlaceOrder" class="btn btn-dark w-100 rounded-pill py-3 fw-bold shadow-lg" :disabled="loading">
-            <span v-if="loading" class="spinner-border spinner-border-sm me-2"></span>
-            ĐẶT HÀNG NGAY
+          <button 
+            @click="handlePlaceOrder" 
+            class="btn btn-dark w-100 rounded-pill py-3 fw-bold mb-3 d-flex align-items-center justify-content-center gap-2"
+            :disabled="loading"
+          >
+            <span v-if="loading" class="spinner-border spinner-border-sm"></span>
+            {{ loading ? 'ĐANG XỬ LÝ...' : 'ĐẶT HÀNG NGAY' }}
           </button>
           
-          <router-link to="/cart" class="btn btn-link text-dark text-decoration-none mt-3 w-100 text-center small fw-bold p-0">
+          <router-link to="/cart" class="btn btn-link w-100 text-dark text-decoration-none small fw-bold">
             <i class="fas fa-arrow-left me-2"></i> Quay lại giỏ hàng
           </router-link>
         </div>
@@ -369,22 +398,27 @@ const handlePlaceOrder = async () => {
 </template>
 
 <style scoped>
-.form-control:focus, .form-select:focus {
-  background-color: #eee;
-  box-shadow: none;
-}
 .payment-option {
   cursor: pointer;
-  transition: 0.3s;
+  transition: all 0.2s ease;
 }
+
 .payment-option:hover {
   background-color: #f8f9fa;
+  border-color: #dee2e6;
 }
+
 .payment-option.active {
-  border-color: #000 !important;
-  background-color: #f8f9fa;
+  border-color: #0d6efd !important;
+  background-color: #f8fbff;
 }
-.payment-option input {
-  cursor: pointer;
+
+.form-check-input:checked {
+  background-color: #0d6efd;
+  border-color: #0d6efd;
+}
+
+.sticky-top {
+  z-index: 10;
 }
 </style>
