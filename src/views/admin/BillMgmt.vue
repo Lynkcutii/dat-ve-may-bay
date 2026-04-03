@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import axios from 'axios';
 import DateFilter from '@/components/DateFilter.vue';
+import RefundRequestModal from '@/components/RefundRequestModal.vue';
 
 const apiBaseUrl = 'http://localhost:8080/api/admin';
 
@@ -10,6 +11,7 @@ const loading = ref(true);
 const selectedBill = ref(null);
 const billDetail = ref(null);
 const newStatus = ref('');
+const showRefundModal = ref(false);
 
 const filterData = ref({ day: '', month: '', year: '' });
 const filterLoaiDon = ref('');
@@ -125,6 +127,24 @@ const openEditModal = (bill) => {
 
 const updateStatus = async () => {
   if (!selectedBill.value || !newStatus.value) return;
+
+  if (newStatus.value === 'HOAN_TRA') {
+    if (selectedBill.value.trangThaiDon !== 'DA_GIAO') {
+      alert('Chỉ có thể tạo yêu cầu hoàn trả cho đơn hàng ĐÃ GIAO.');
+      newStatus.value = selectedBill.value.trangThaiDon;
+      return;
+    }
+    const modal = bootstrap.Modal.getInstance(document.getElementById('editStatusModal'));
+    if (modal) modal.hide();
+    
+    if (!billDetail.value || billDetail.value.bill?.id !== selectedBill.value.id) {
+      await fetchBillDetail(selectedBill.value.id);
+    }
+    
+    showRefundModal.value = true;
+    newStatus.value = selectedBill.value.trangThaiDon; // Reset
+    return;
+  }
 
   try {
     await axios.put(`${apiBaseUrl}/bills/${selectedBill.value.id}/status`, newStatus.value, {
@@ -357,6 +377,13 @@ onMounted(fetchBills);
             </div>
           </div>
           <div class="modal-footer border-0">
+            <button 
+              v-if="billDetail.bill.trangThaiDon === 'DA_GIAO'"
+              class="btn btn-outline-warning rounded-pill px-4 me-2" 
+              @click="showRefundModal = true"
+            >
+              <i class="fas fa-undo-alt me-2"></i>Khởi tạo Đổi Trả
+            </button>
             <button class="btn btn-outline-primary rounded-pill px-4 me-auto" @click="openEditModal(billDetail.bill)">
               <i class="fas fa-edit me-2"></i>Đổi trạng thái
             </button>
@@ -366,6 +393,16 @@ onMounted(fetchBills);
       </div>
     </div>
   </div>
+
+  <!-- Modal Đổi Trả cho Admin -->
+  <RefundRequestModal
+    :show="showRefundModal"
+    :order="billDetail?.bill"
+    :items="billDetail?.items"
+    mode="admin"
+    @close="showRefundModal = false"
+    @success="() => { fetchBills(); if(billDetail?.bill?.id) fetchBillDetail(billDetail.bill.id); }"
+  />
 </template>
 
 <style scoped>

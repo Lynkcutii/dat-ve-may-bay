@@ -51,6 +51,7 @@ const router = createRouter({
         { path: 'promotions/edit/:id', component: () => import('../views/admin/PromotionDetail.vue'), props: true },
 
         { path: 'attributes', component: () => import('../views/admin/AttributeMgmt.vue') },
+        { path: 'returns', component: () => import('../views/admin/ReturnManagement.vue') },
       ]
     }
   ]

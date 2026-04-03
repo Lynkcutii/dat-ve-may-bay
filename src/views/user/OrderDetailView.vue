@@ -164,19 +164,39 @@
 
           <div class="mt-5 pt-4 border-top text-end d-flex justify-content-end gap-3">
             <button v-if="order.trangThaiDon === 'DA_DAT' || order.trangThaiDon === 'CHO_XAC_NHAN'" @click="handleCancelOrder" class="btn btn-outline-danger rounded-pill px-5 py-2 fw-bold small">HỦY ĐƠN HÀNG</button>
+            <button v-if="canRequestRefund" @click="showRefundModal = true" class="btn btn-outline-warning rounded-pill px-5 py-2 fw-bold small">
+              <i class="fas fa-undo-alt me-2"></i>YÊU CẦU HOÀN TRẢ
+            </button>
             <button v-if="order.trangThaiDon === 'DA_GIAO'" @click="reorder" class="btn btn-dark rounded-pill px-5 py-2 fw-bold small">MUA LẠI ĐƠN HÀNG</button>
+          </div>
+
+          <!-- Thông báo đã có yêu cầu hoàn trả -->
+          <div v-if="order.hoanTra" class="alert alert-info mt-3 small">
+            <i class="fas fa-info-circle me-1"></i>
+            Đơn hàng này đã có yêu cầu hoàn trả vào {{ new Date(order.hoanTra).toLocaleString('vi-VN') }}
           </div>
         </div>
       </div>
     </div>
+
+    <!-- Modal Đổi Trả -->
+    <RefundRequestModal
+      :show="showRefundModal"
+      :order="order"
+      :items="orderDetails"
+      mode="user"
+      @close="showRefundModal = false"
+      @success="fetchOrder"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 import { API_BASE_URL } from '@/config';
+import RefundRequestModal from '@/components/RefundRequestModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -184,6 +204,17 @@ const router = useRouter();
 const order = ref(null);
 const orderDetails = ref([]);
 const loading = ref(true);
+const showRefundModal = ref(false);
+
+// Kiểm tra có thể yêu cầu hoàn trả: DA_GIAO + chưa quá 7 ngày
+const canRequestRefund = computed(() => {
+  if (!order.value) return false;
+  if (order.value.trangThaiDon !== 'DA_GIAO') return false;
+  const ngayGiao = order.value.ngayCapNhat || order.value.ngayTao;
+  if (!ngayGiao) return false;
+  const diffDays = (Date.now() - new Date(ngayGiao).getTime()) / (1000 * 60 * 60 * 24);
+  return diffDays <= 7;
+});
 
 const steps = [
   { label: 'Đã đặt', value: 'DA_DAT', icon: 'fas fa-receipt' },
