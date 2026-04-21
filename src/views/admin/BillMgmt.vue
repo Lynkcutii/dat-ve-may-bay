@@ -129,8 +129,9 @@ const updateStatus = async () => {
   if (!selectedBill.value || !newStatus.value) return;
 
   if (newStatus.value === 'HOAN_TRA') {
-    if (selectedBill.value.trangThaiDon !== 'DA_GIAO') {
-      alert('Chỉ có thể tạo yêu cầu hoàn trả cho đơn hàng ĐÃ GIAO.');
+    const allowedStatuses = ['DA_GIAO', 'YEU_CAU_TRA_HANG', 'HOAN_TRA_MOT_PHAN'];
+    if (!allowedStatuses.includes(selectedBill.value.trangThaiDon)) {
+      alert('Chỉ có thể tạo yêu cầu hoàn trả cho đơn hàng ĐÃ GIAO, đang xử lý đổi trả hoặc đã trả một phần.');
       newStatus.value = selectedBill.value.trangThaiDon;
       return;
     }

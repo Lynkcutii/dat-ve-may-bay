@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import axios from 'axios';
 import { API_BASE_URL } from '@/config';
 
@@ -13,19 +13,54 @@ const props = defineProps({
 const emit = defineEmits(['close', 'success']);
 
 const lyDo = ref('');
+const loaiDoiTra = ref('REFUND'); 
 const selectedFiles = ref([]);
 const selectedItems = ref([]);
+const allProducts = ref([]);
 const submitting = ref(false);
 const errorMsg = ref('');
 
-// Reset form khi modal mở
+// Fetch danh sách sản phẩm (bao gồm biến thể)
+const fetchProducts = async () => {
+  try {
+    const res = await axios.get(`${API_BASE_URL}/api/admin/products`);
+    if (!res.data || !Array.isArray(res.data)) {
+      console.warn("API trả về không đúng định dạng mảng");
+      return;
+    }
+    
+    let flattened = [];
+    res.data.forEach(p => {
+      const variants = p.details || p.variants || []; 
+      variants.forEach(v => {
+        flattened.push({
+          ...v,
+          productName: p.tenSanPham,
+          productId: p.id,
+          display: `${p.tenSanPham} [${v.mauSac?.ten || ''} - ${v.kichThuoc?.ten || ''}]`
+        });
+      });
+    });
+    allProducts.value = flattened;
+  } catch (error) {
+    console.error("Lỗi fetch products:", error);
+    errorMsg.value = "Không thể tải danh sách sản phẩm để đổi. Vui lòng kiểm tra kết nối API.";
+  }
+};
+
+onMounted(fetchProducts);
+
+// Reset form
 watch(() => props.show, (val) => {
   if (val) {
     lyDo.value = '';
+    loaiDoiTra.value = props.order?.loaiDonHang === 'OFFLINE' ? 'EXCHANGE' : 'REFUND';
     selectedFiles.value = [];
     selectedItems.value = [];
     errorMsg.value = '';
-    // Khởi tạo danh sách sản phẩm với số lượng trả = 0 và chưa chọn
+    // Gọi lại để đảm bảo dữ liệu mới nhất
+    fetchProducts();
+
     if (props.items?.length) {
       selectedItems.value = props.items.map(item => ({
         id: item.id,
@@ -36,267 +71,256 @@ watch(() => props.show, (val) => {
         donGia: item.donGia,
         soLuong: item.soLuong,
         soLuongTra: 0,
-        checked: false
+        checked: false,
+        spctMoi: null,
+        searchQuery: '', 
+        showDropdown: false
       }));
     }
   }
 });
 
-// Tính tổng tiền hoàn (có chia tỷ lệ trừ khấu trừ voucher giống Backend)
-const tongTienHoan = computed(() => {
-  const tongTienHang = (props.order && props.order.tongTienHang > 0) ? props.order.tongTienHang : 1;
-  const tienGiam = props.order?.tienGiam || 0;
+// Lọc kết quả tìm kiếm cho từng item
+const getFilteredVariants = (item) => {
+  const s = item.searchQuery.toLowerCase();
+  if (!s && props.order?.loaiDonHang !== 'OFFLINE') return [];
 
-  return selectedItems.value
-    .filter(i => i.checked && i.soLuongTra > 0)
-    .reduce((sum, i) => {
-      const giaTriGoc = i.donGia * i.soLuongTra;
-      const tienGiamPhanBo = (giaTriGoc * tienGiam) / tongTienHang;
-      return sum + (giaTriGoc - tienGiamPhanBo);
-    }, 0);
-});
-
-// Xử lý chọn file ảnh
-const onFileChange = (e) => {
-  const files = Array.from(e.target.files);
-  errorMsg.value = '';
-
-  // Validate file
-  for (const file of files) {
-    if (!['image/jpeg', 'image/png'].includes(file.type)) {
-      errorMsg.value = 'Chỉ chấp nhận file .jpg, .png';
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      errorMsg.value = `File "${file.name}" vượt quá 5MB`;
-      return;
-    }
+  // Nếu Offline: Chỉ hiện các biến thể của chính sản phẩm đó
+  if (props.order?.loaiDonHang === 'OFFLINE') {
+    const originalProductId = props.items.find(i => i.id === item.id)?.sanPhamChiTiet?.sanPham?.id;
+    return allProducts.value.filter(v => v.productId === originalProductId && v.display.toLowerCase().includes(s));
   }
-  selectedFiles.value = files;
+
+  return allProducts.value.filter(v => v.display.toLowerCase().includes(s) || v.ma?.toLowerCase().includes(s)).slice(0, 10);
 };
 
-// Xóa 1 file đã chọn
-const removeFile = (index) => {
-  selectedFiles.value = selectedFiles.value.filter((_, i) => i !== index);
+// Chọn sản phẩm mới
+const selectVariant = (item, variant) => {
+  item.spctMoi = {
+    id: variant.id,
+    tenSanPham: variant.productName,
+    mauSac: variant.mauSac?.ten,
+    kichThuoc: variant.kichThuoc?.ten,
+    giaBan: variant.giaBan,
+    ma: variant.ma
+  };
+  item.searchQuery = variant.display;
+  item.showDropdown = false;
 };
 
-// Validate trước khi submit
-const canSubmit = computed(() => {
-  const hasChecked = selectedItems.value.some(i => i.checked && i.soLuongTra > 0);
-  const hasFiles = selectedFiles.value.length > 0;
-  const hasLyDo = lyDo.value.trim().length > 0;
-  // Ảnh bắt buộc cho cả user và admin
-  return hasChecked && hasFiles && hasLyDo && !submitting.value;
+// Tính tổng tiền hoàn (sau voucher)
+const tongTienHoanValue = computed(() => {
+  const tongTienHang = Number(props.order?.tongTienHang || 1);
+  const tienGiam = Number(props.order?.tienGiam || 0);
+
+  const total = selectedItems.value
+    .filter(i => i.checked && Number(i.soLuongTra) > 0)
+    .reduce((sum, i) => {
+      const giaTriGoc = Number(i.donGia) * Number(i.soLuongTra);
+      const tienGiamPhanBo = Math.ceil((giaTriGoc * tienGiam) / tongTienHang);
+      const thucTe = giaTriGoc - tienGiamPhanBo;
+      console.log(`Item ${i.tenSanPham}: Hoàn ${thucTe} (Gốc: ${giaTriGoc}, Khấu trừ KM: ${tienGiamPhanBo})`);
+      return sum + thucTe;
+    }, 0);
+  console.log("==> TỔNG TIỀN HOÀN CŨ:", total);
+  return total;
 });
 
-// Format tiền
-const formatPrice = (v) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v);
+const tongGiaTriDoiMoi = computed(() => {
+  if (loaiDoiTra.value !== 'EXCHANGE') return 0;
+  const total = selectedItems.value
+    .filter(i => i.checked && i.spctMoi && Number(i.soLuongTra) > 0)
+    .reduce((sum, i) => {
+      const giaTriMoi = Number(i.spctMoi.giaBan) * Number(i.soLuongTra);
+      console.log(`Item Đổi ${i.spctMoi.tenSanPham}: Giá mới ${giaTriMoi}`);
+      return sum + giaTriMoi;
+    }, 0);
+  console.log("==> TỔNG GIÁ TRỊ HÀNG MỚI:", total);
+  return total;
+});
 
-// Submit đổi trả
+// Watch để tự động set SL = 1 khi tích chọn
+watch(selectedItems, (newItems) => {
+  newItems.forEach(item => {
+    if (item.checked && (item.soLuongTra === 0 || !item.soLuongTra)) {
+      item.soLuongTra = 1;
+    }
+  });
+}, { deep: true });
+
+const tienChenhLech = computed(() => {
+  if (loaiDoiTra.value !== 'EXCHANGE') return 0;
+  const diff = tongGiaTriDoiMoi.value - tongTienHoanValue.value;
+  console.log("==> CHÊNH LỆCH (Mới - Cũ):", diff);
+  return diff;
+});
+
+const onFileChange = (e) => {
+  selectedFiles.value = Array.from(e.target.files);
+};
+
+const canSubmit = computed(() => {
+  const selected = selectedItems.value.filter(i => i.checked && i.soLuongTra > 0);
+  const exchangeValid = loaiDoiTra.value === 'REFUND' || selected.every(i => i.spctMoi != null);
+  return selected.length > 0 && selectedFiles.value.length > 0 && lyDo.value.trim() && exchangeValid && !submitting.value;
+});
+
+const formatPrice = (v) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Math.abs(v));
+
 const submitRequest = async () => {
   if (!canSubmit.value) return;
-
-  // Lọc các sản phẩm được chọn
-  const chiTiets = selectedItems.value
-    .filter(i => i.checked && i.soLuongTra > 0)
-    .map(i => ({
-      hoaDonChiTietId: i.id,
-      soLuongTra: i.soLuongTra
-    }));
-
-  if (chiTiets.length === 0) {
-    errorMsg.value = 'Vui lòng chọn ít nhất 1 sản phẩm để đổi trả';
-    return;
-  }
-
   submitting.value = true;
-  errorMsg.value = '';
-
   try {
     const formData = new FormData();
-
-    // Tạo JSON data part
     const dataPayload = {
       hoaDonId: props.order.id,
       lyDo: lyDo.value.trim(),
-      chiTiets: chiTiets
+      loaiDoiTra: loaiDoiTra.value,
+      chiTiets: selectedItems.value.filter(i => i.checked).map(i => ({
+        hoaDonChiTietId: i.id,
+        soLuongTra: i.soLuongTra,
+        idSpctMoi: i.spctMoi?.id
+      }))
     };
     formData.append('data', new Blob([JSON.stringify(dataPayload)], { type: 'application/json' }));
+    selectedFiles.value.forEach(f => formData.append('files', f));
 
-    // Append ảnh
-    for (const file of selectedFiles.value) {
-      formData.append('files', file);
-    }
-
-    // Gọi API theo mode
-    const url = props.mode === 'admin'
-      ? `${API_BASE_URL}/api/admin/doi-tra/request-by-admin`
-      : `${API_BASE_URL}/api/user/doi-tra/request`;
-
-    await axios.post(url, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-
-    alert('Gửi yêu cầu đổi trả thành công!');
-    emit('success');
-    emit('close');
+    const url = props.mode === 'admin' ? `${API_BASE_URL}/api/admin/doi-tra/request-by-admin` : `${API_BASE_URL}/api/user/doi-tra/request`;
+    await axios.post(url, formData);
+    alert('Thành công!');
+    emit('success'); emit('close');
   } catch (error) {
-    const msg = error.response?.data?.error || error.message || 'Có lỗi xảy ra';
-    errorMsg.value = msg;
-  } finally {
-    submitting.value = false;
-  }
+    errorMsg.value = error.response?.data?.error || 'Lỗi hệ thống';
+  } finally { submitting.value = false; }
 };
 </script>
 
 <template>
-  <!-- Overlay -->
   <div v-if="show" class="modal-backdrop fade show" @click="$emit('close')"></div>
   
   <div class="modal fade" :class="{ show: show, 'd-block': show }" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-      <div class="modal-content border-0 shadow">
-        <!-- Header -->
+    <div class="modal-dialog modal-lg modal-dialog-scrollable shadow-lg">
+      <div class="modal-content border-0">
         <div class="modal-header border-0 bg-danger text-white">
           <h5 class="modal-title fw-bold">
-            <i class="fas fa-undo-alt me-2"></i>
-            {{ mode === 'admin' ? 'Khởi Tạo Đổi Trả (Admin)' : 'Yêu Cầu Hoàn Trả' }}
+            <i class="fas fa-undo-alt me-2"></i> {{ mode === 'admin' ? 'Khởi Tạo Đổi Trả (Admin)' : 'Yêu Cầu Hoàn Trả' }}
           </h5>
           <button type="button" class="btn-close btn-close-white" @click="$emit('close')"></button>
         </div>
 
-        <!-- Body -->
-        <div class="modal-body">
-          <!-- Thông tin đơn hàng -->
-          <div class="alert alert-light border mb-4">
-            <div class="d-flex justify-content-between">
-              <span class="small text-muted">Mã đơn hàng</span>
-              <span class="fw-bold text-danger">{{ order?.maHoaDon }}</span>
+        <div class="modal-body p-4">
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <div class="card bg-light border-0">
+                <div class="card-body py-2">
+                  <span class="x-small text-muted d-block">Mã đơn hàng</span>
+                  <span class="fw-bold text-danger">{{ order?.maHoaDon }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="d-flex h-100 gap-2">
+                <div class="flex-grow-1 border rounded d-flex align-items-center justify-content-center p-2 cursor-pointer"
+                  :class="loaiDoiTra === 'REFUND' ? 'border-danger bg-danger text-white fw-bold' : 'bg-white'"
+                  @click="order?.loaiDonHang !== 'OFFLINE' && (loaiDoiTra = 'REFUND')"
+                  :style="{ opacity: order?.loaiDonHang === 'OFFLINE' ? 0.5 : 1 }"> Hoàn tiền </div>
+                <div class="flex-grow-1 border rounded d-flex align-items-center justify-content-center p-2 cursor-pointer"
+                  :class="loaiDoiTra === 'EXCHANGE' ? 'border-primary bg-primary text-white fw-bold' : 'bg-white'"
+                  @click="loaiDoiTra = 'EXCHANGE'"> Đổi hàng </div>
+              </div>
             </div>
           </div>
 
-          <!-- Danh sách sản phẩm -->
-          <h6 class="fw-bold mb-3">
-            <i class="fas fa-box me-2"></i>Chọn sản phẩm hoàn trả
-          </h6>
           <div class="product-list mb-4">
-            <div 
-              v-for="(item, index) in selectedItems" 
-              :key="item.id"
-              class="product-item border rounded-3 p-3 mb-2"
-              :class="{ 'border-danger bg-danger bg-opacity-10': item.checked }"
-            >
+            <div v-for="item in selectedItems" :key="item.id" class="product-item border rounded-3 p-3 mb-3 shadow-sm" :class="{ 'border-danger': item.checked }">
               <div class="d-flex align-items-start gap-3">
-                <div class="form-check mt-1">
-                  <input 
-                    class="form-check-input" 
-                    type="checkbox" 
-                    v-model="item.checked"
-                    :id="'item-' + item.id"
-                  >
-                </div>
+                <input class="form-check-input mt-1" type="checkbox" v-model="item.checked">
                 <div class="flex-grow-1">
-                  <div class="fw-bold small">{{ item.tenSanPham }}</div>
-                  <div class="text-muted x-small">
-                    {{ item.mauSac }} | {{ item.kichThuoc }} | {{ item.chatLieu }}
-                  </div>
-                  <div class="small mt-1">
-                    Đơn giá: <span class="text-danger fw-bold">{{ formatPrice(item.donGia) }}</span>
-                    &nbsp;|&nbsp; Đã mua: <strong>{{ item.soLuong }}</strong>
-                  </div>
+                  <div class="fw-bold text-dark small">{{ item.tenSanPham }}</div>
+                  <div class="text-muted x-small">{{ item.mauSac }} | {{ item.kichThuoc }}</div>
+                  <div class="x-small mt-1 text-danger fw-bold">{{ formatPrice(item.donGia) }}</div>
                 </div>
-                <div v-if="item.checked" class="text-center" style="min-width: 120px;">
-                  <label class="form-label x-small text-muted mb-1">Số lượng trả</label>
-                  <input 
-                    type="number" 
-                    class="form-control form-control-sm text-center border-danger"
-                    v-model.number="item.soLuongTra"
-                    :min="1"
+                <div v-if="item.checked" class="text-center" style="width: 80px;">
+                  <input type="number" 
+                    class="form-control form-control-sm text-center" 
+                    v-model.number="item.soLuongTra" 
+                    :min="1" 
                     :max="item.soLuong"
+                    @input="handleQuantityInput(item)"
                   >
                 </div>
               </div>
-              <!-- Giá trị hoàn dòng -->
-              <div v-if="item.checked && item.soLuongTra > 0" class="text-end mt-2 small">
-                Hoàn: <span class="fw-bold text-success">{{ formatPrice(item.donGia * item.soLuongTra) }}</span>
-              </div>
-            </div>
-          </div>
 
-          <!-- Tổng tiền hoàn -->
-          <div v-if="tongTienHoan > 0" class="alert alert-success d-flex justify-content-between align-items-center">
-            <span class="fw-bold">Tổng tiền hoàn (không gồm phí ship):</span>
-            <span class="fs-5 fw-bold">{{ formatPrice(tongTienHoan) }}</span>
-          </div>
-
-          <!-- Lý do -->
-          <div class="mb-3">
-            <label class="form-label fw-bold small">
-              <i class="fas fa-comment-alt me-1"></i>Lý do đổi trả <span class="text-danger">*</span>
-            </label>
-            <textarea
-              v-model="lyDo"
-              class="form-control"
-              rows="3"
-              placeholder="Mô tả lý do bạn muốn hoàn trả sản phẩm..."
-              maxlength="255"
-            ></textarea>
-            <div class="text-end x-small text-muted mt-1">{{ lyDo.length }}/255</div>
-          </div>
-
-          <!-- Upload ảnh -->
-          <div class="mb-3">
-            <label class="form-label fw-bold small">
-              <i class="fas fa-camera me-1"></i>Ảnh minh chứng <span class="text-danger">*</span>
-              <span class="text-muted fw-normal ms-1">(JPG, PNG, tối đa 5MB/ảnh)</span>
-            </label>
-            <input 
-              type="file" 
-              class="form-control"
-              accept=".jpg,.jpeg,.png"
-              multiple
-              @change="onFileChange"
-            >
-            <!-- Preview ảnh -->
-            <div v-if="selectedFiles.length" class="d-flex gap-2 mt-2 flex-wrap">
-              <div v-for="(file, idx) in selectedFiles" :key="idx" class="position-relative">
-                <img 
-                  :src="getFilePreview(file)" 
-                  class="rounded-2 border" 
-                  style="width: 80px; height: 80px; object-fit: cover;"
-                  v-if="file._preview"
-                >
-                <div v-else class="border rounded-2 d-flex align-items-center justify-content-center bg-light" style="width: 80px; height: 80px;">
-                  <i class="fas fa-image text-muted"></i>
+              <!-- INLINE EXCHANGE SELECTION -->
+              <div v-if="item.checked && loaiDoiTra === 'EXCHANGE'" class="mt-3 p-3 bg-light rounded border-top position-relative">
+                <label class="x-small fw-bold text-primary mb-1">Đổi sang sản phẩm:</label>
+                <div class="input-group input-group-sm mb-1">
+                  <span class="input-group-text bg-white border-end-0"><i class="fas fa-search text-muted"></i></span>
+                  <input type="text" class="form-control border-start-0" 
+                    v-model="item.searchQuery" 
+                    placeholder="Tìm tên hoặc mã SP mới..." 
+                    @focus="item.showDropdown = true"
+                  >
                 </div>
-                <button 
-                  @click="removeFile(idx)" 
-                  class="btn btn-sm btn-danger position-absolute top-0 end-0 rounded-circle p-0"
-                  style="width: 20px; height: 20px; font-size: 10px; line-height: 1;"
-                >×</button>
-                <div class="x-small text-center text-truncate" style="max-width: 80px;">{{ file.name }}</div>
+                
+                <!-- Dropdown kết quả -->
+                <div v-if="item.showDropdown" class="list-group position-absolute w-100 shadow-lg" style="z-index: 100; max-height: 200px; overflow-y: auto; left: 0;">
+                  <button v-for="v in getFilteredVariants(item)" :key="v.id" 
+                    class="list-group-item list-group-item-action py-2"
+                    @click="selectVariant(item, v)">
+                    <div class="d-flex justify-content-between">
+                      <span class="small">{{ v.display }}</span>
+                      <span class="small fw-bold text-danger">{{ formatPrice(v.giaBan) }}</span>
+                    </div>
+                    <div class="x-small text-muted">Kho: {{ v.soLuong }} | Mã: {{ v.ma }}</div>
+                  </button>
+                  <div v-if="getFilteredVariants(item).length === 0" class="list-group-item x-small text-muted">Không tìm thấy sản phẩm phù hợp</div>
+                </div>
+
+                <div v-if="item.spctMoi" class="mt-2 p-2 border rounded bg-white d-flex justify-content-between align-items-center">
+                  <div>
+                    <span class="badge bg-primary me-2">Đã chọn</span>
+                    <span class="small fw-bold">{{ item.spctMoi.tenSanPham }}</span>
+                    <div class="x-small text-muted">{{ item.spctMoi.mauSac }} / {{ item.spctMoi.kichThuoc }}</div>
+                  </div>
+                  <div class="text-danger fw-bold small">{{ formatPrice(item.spctMoi.giaBan) }}</div>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Error message -->
-          <div v-if="errorMsg" class="alert alert-danger small py-2">
-            <i class="fas fa-exclamation-circle me-1"></i>{{ errorMsg }}
+          <div class="card border-0 bg-light mb-4" v-if="tongTienHoanValue > 0">
+            <div class="card-body py-3">
+              <div class="d-flex justify-content-between x-small mb-1">
+                <span>Giá trị hàng hoàn (sau voucher):</span>
+                <span class="fw-bold">{{ formatPrice(tongTienHoanValue) }}</span>
+              </div>
+              <div v-if="loaiDoiTra === 'EXCHANGE'" class="d-flex justify-content-between x-small mb-1">
+                <span>Giá trị hàng mới:</span>
+                <span class="fw-bold text-primary">{{ formatPrice(tongGiaTriDoiMoi) }}</span>
+              </div>
+              <hr class="my-2">
+              <div class="d-flex justify-content-between align-items-center">
+                <span class="fw-bold small">{{ loaiDoiTra === 'REFUND' ? 'Tổng tiền hoàn trả:' : (tienChenhLech >= 0 ? 'Khách bù thêm:' : 'Shop hoàn lại:') }}</span>
+                <span class="fs-5 fw-bold" :class="loaiDoiTra === 'REFUND' || tienChenhLech < 0 ? 'text-success' : 'text-danger'">
+                  {{ loaiDoiTra === 'REFUND' ? formatPrice(tongTienHoanValue) : formatPrice(tienChenhLech) }}
+                </span>
+              </div>
+            </div>
           </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-bold small">Lý do & Ảnh minh chứng *</label>
+            <textarea v-model="lyDo" class="form-control form-control-sm mb-2" rows="2" placeholder="Mô tả lý do..."></textarea>
+            <input type="file" class="form-control form-control-sm" multiple @change="onFileChange">
+          </div>
+          <div v-if="errorMsg" class="alert alert-danger py-1 x-small">{{ errorMsg }}</div>
         </div>
 
-        <!-- Footer -->
         <div class="modal-footer border-0">
           <button type="button" class="btn btn-light rounded-pill px-4" @click="$emit('close')">Hủy</button>
-          <button 
-            type="button"
-            class="btn btn-danger rounded-pill px-4 fw-bold"
-            :disabled="!canSubmit"
-            @click="submitRequest"
-          >
-            <span v-if="submitting" class="spinner-border spinner-border-sm me-2"></span>
-            <i v-else class="fas fa-paper-plane me-2"></i>
-            Gửi yêu cầu
+          <button type="button" class="btn btn-danger rounded-pill px-4 fw-bold" :disabled="!canSubmit" @click="submitRequest">
+            <span v-if="submitting" class="spinner-border spinner-border-sm me-2"></span> Gửi yêu cầu
           </button>
         </div>
       </div>
@@ -306,7 +330,7 @@ const submitRequest = async () => {
 
 <style scoped>
 .x-small { font-size: 0.75rem; }
-.product-item { transition: all 0.2s ease; }
-.product-item:hover { border-color: #dc3545 !important; }
+.product-item { transition: all 0.2s; }
 .modal.show { display: block !important; }
+.cursor-pointer { cursor: pointer; }
 </style>

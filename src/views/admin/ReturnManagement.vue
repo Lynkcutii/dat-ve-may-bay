@@ -9,6 +9,10 @@ const loading = ref(true);
 const activeTab = ref('CHO_XAC_NHAN_HOAN');
 const selectedReturn = ref(null);
 const showDetailModal = ref(false);
+const showLogModal = ref(false);
+const returnLogs = ref([]);
+const ghiChuAdmin = ref('');
+const qualityCheck = ref({}); // { id_dtct: true/false }
 
 const tabs = [
   { label: 'Yêu Cầu Mới', value: 'CHO_XAC_NHAN_HOAN', icon: 'fas fa-inbox', color: 'warning' },
@@ -18,12 +22,58 @@ const tabs = [
   { label: 'Từ Chối', value: 'TU_CHOI', icon: 'fas fa-times-circle', color: 'danger' }
 ];
 
+const LOAI_DOI_TRA = {
+  REFUND: { text: 'Hoàn tiền 100%', class: 'text-success' },
+  EXCHANGE: { text: 'Đổi sản phẩm', class: 'text-primary' }
+};
+
 const STATUS_MAP = {
   CHO_XAC_NHAN_HOAN: { text: 'Chờ xác nhận', badge: 'bg-warning text-dark' },
   CHO_GIAO_HANG: { text: 'Chờ gửi hàng', badge: 'bg-info text-white' },
   DA_NHAN_HANG_KIEM_TRA: { text: 'Đang kiểm tra', badge: 'bg-primary text-white' },
   HOAN_THANH: { text: 'Hoàn thành', badge: 'bg-success text-white' },
-  TU_CHOI: { text: 'Từ chối', badge: 'bg-danger text-white' }
+  TU_CHOI: { text: 'Từ chối', badge: 'bg-danger text-white' },
+  CANCELLED: { text: 'Đã hủy', badge: 'bg-secondary text-white' }
+};
+
+const STATUS_PAYMENT_MAP = {
+  CHUA_THANH_TOAN: { text: 'Chưa thanh toán/hoàn', badge: 'bg-light text-danger border-danger' },
+  DA_THANH_TOAN: { text: 'Đã thanh toán/hoàn', badge: 'bg-success text-white' },
+  KHONG_CAN_THANH_TOAN: { text: 'Không phát sinh tiền', badge: 'bg-light text-muted' }
+};
+
+// ...
+
+// Xác nhận thanh toán thủ công
+const confirmPaymentManual = (id) => {
+  confirmAction('Xác nhận đã hoàn tất giao dịch tiền mặt/chuyển khoản cho yêu cầu này?', async () => {
+    try {
+      await axios.put(`${apiBaseUrl}/${id}/xac-nhan-thanh-toan`);
+      alert('Đã cập nhật trạng thái thanh toán!');
+      await fetchReturns();
+      if (selectedReturn.value) {
+        selectedReturn.value = allReturns.value.find(r => r.id === id);
+      }
+    } catch (e) {
+      alert('Thao tác thất bại');
+    }
+  });
+};
+
+// ... các computed khác
+
+// Hủy yêu cầu (Rollback)
+const cancelRequest = (id) => {
+  confirmAction('Bạn có chắc muốn HỦY yêu cầu này? Mọi trạng thái sẽ được đưa về CANCELLED.', async () => {
+    try {
+      await axios.put(`${apiBaseUrl}/${id}/huy`, { ghiChu: ghiChuAdmin.value || 'Admin hủy yêu cầu' });
+      alert('Đã hủy yêu cầu.');
+      await fetchReturns();
+      showDetailModal.value = false;
+    } catch (e) {
+      alert(e.response?.data?.error || 'Hủy thất bại');
+    }
+  });
 };
 
 // Lọc theo tab
@@ -35,7 +85,10 @@ const filteredReturns = computed(() =>
 const tabCount = (status) => allReturns.value.filter(r => r.trangThai === status).length;
 
 // Format
-const formatCurrency = (v) => `${Number(v || 0).toLocaleString('vi-VN')} đ`;
+const formatCurrency = (v) => {
+  const num = Number(v || 0);
+  return `${Math.abs(num).toLocaleString('vi-VN')} đ`;
+};
 const formatDateTime = (v) => v ? new Date(v).toLocaleString('vi-VN') : 'Không có';
 
 // Fetch
@@ -51,6 +104,17 @@ const fetchReturns = async () => {
   }
 };
 
+// Xem nhật ký
+const viewLogs = async (item) => {
+  try {
+    const res = await axios.get(`${apiBaseUrl}/logs/doi-tra/${item.id}`);
+    returnLogs.value = res.data;
+    showLogModal.value = true;
+  } catch (e) {
+    alert('Không thể tải nhật ký');
+  }
+};
+
 // Parse ảnh JSON
 const parseImages = (jsonStr) => {
   if (!jsonStr) return [];
@@ -60,6 +124,14 @@ const parseImages = (jsonStr) => {
 // Xem chi tiết
 const viewDetail = (item) => {
   selectedReturn.value = item;
+  ghiChuAdmin.value = item.ghiChuAdmin || '';
+  qualityCheck.value = {};
+  // Khởi tạo qualityCheck: mặc định là false (Hàng tốt)
+  if (item.chiTiets) {
+    item.chiTiets.forEach(ct => {
+      qualityCheck.value[ct.id] = false;
+    });
+  }
   showDetailModal.value = true;
 };
 
@@ -86,7 +158,11 @@ const approveRequest = (id) => {
 
 // Tab Mới: Từ chối
 const rejectRequest = (id) => {
-  confirmAction('Xác nhận TỪ CHỐI yêu cầu đổi trả này? Hành động này không thể hoàn tác.', async () => {
+  if (!ghiChuAdmin.value.trim()) {
+    alert('Vui lòng nhập lý do từ chối vào ô Ghi chú Admin');
+    return;
+  }
+  confirmAction('Xác nhận TỪ CHỐI yêu cầu đổi trả này?', async () => {
     try {
       await axios.put(`${apiBaseUrl}/${id}/tu-choi`);
       alert('Đã từ chối yêu cầu.');
@@ -112,29 +188,40 @@ const confirmReceived = (id) => {
   });
 };
 
-// Tab Kiểm Hàng: Duyệt hoàn tiền
-const approveRefund = (id) => {
+// Tab Kiểm Hàng: Duyệt Quyết Định (Hoàn tất)
+const approveDecision = (id) => {
   confirmAction(
-    '⚠️ Xác nhận DUYỆT HOÀN TIỀN?\n\n• Tồn kho sẽ được cộng lại\n• Tiền sẽ được hoàn qua VNPay\n• Không thể hoàn tác!',
+    'Xác nhận HOÀN TẤT yêu cầu này? \n- Hàng tốt sẽ về kho bán, hàng lỗi vào kho riêng. \n- Hệ thống sẽ tự động xử lý tồn kho sản phẩm mới (nếu có).',
     async () => {
       try {
-        await axios.put(`${apiBaseUrl}/${id}/quyet-dinh`, { action: 'HOAN_TIEN' });
-        alert('Hoàn tiền thành công! Tồn kho đã được cập nhật.');
+        await axios.put(`${apiBaseUrl}/${id}/quyet-dinh`, { 
+          action: 'HOAN_THANH',
+          chiTietKiemKho: qualityCheck.value,
+          ghiChuAdmin: ghiChuAdmin.value
+        });
+        alert('Xử lý thành công!');
         await fetchReturns();
         showDetailModal.value = false;
       } catch (e) {
-        alert(e.response?.data?.error || 'Hoàn tiền thất bại. Vui lòng thử lại.');
+        alert(e.response?.data?.error || 'Thao tác thất bại. Vui lòng kiểm tra lại tồn kho SP đổi.');
       }
     }
   );
 };
 
-// Tab Kiểm Hàng: Từ chối (hàng lỗi do khách)
+// Tab Kiểm Hàng: Từ chối sau kiểm tra
 const rejectAfterCheck = (id) => {
-  confirmAction('Xác nhận TỪ CHỐI hoàn trả? Hàng sẽ được trả lại khách (khách chịu phí ship).', async () => {
+  if (!ghiChuAdmin.value.trim()) {
+    alert('Vui lòng nhập lý do từ chối vào ô Ghi chú Admin');
+    return;
+  }
+  confirmAction('Xác nhận TỪ CHỐI yêu cầu sau khi kiểm tra? Hàng sẽ được gửi trả lại khách.', async () => {
     try {
-      await axios.put(`${apiBaseUrl}/${id}/quyet-dinh`, { action: 'TU_CHOI' });
-      alert('Đã từ chối. Hàng sẽ được trả lại cho khách.');
+      await axios.put(`${apiBaseUrl}/${id}/quyet-dinh`, { 
+        action: 'TU_CHOI',
+        ghiChuAdmin: ghiChuAdmin.value
+      });
+      alert('Đã từ chối thành công.');
       await fetchReturns();
       showDetailModal.value = false;
     } catch (e) {
@@ -197,23 +284,33 @@ onMounted(fetchReturns);
                   <span :class="['badge rounded-pill px-2', STATUS_MAP[item.trangThai]?.badge]">
                     {{ STATUS_MAP[item.trangThai]?.text }}
                   </span>
+                  <span :class="['small fw-bold', LOAI_DOI_TRA[item.loaiDoiTra]?.class]">
+                    <i class="fas fa-sync-alt me-1"></i>{{ LOAI_DOI_TRA[item.loaiDoiTra]?.text }}
+                  </span>
                 </div>
                 <p class="text-muted small mb-1">
                   <i class="fas fa-file-invoice me-1"></i>Mã HĐ: <strong>{{ item.hoaDon?.maHoaDon }}</strong>
                 </p>
-                <p class="text-muted small mb-1">
+                <p class="text-muted small mb-1 text-truncate" style="max-width: 300px;">
                   <i class="fas fa-comment me-1"></i>{{ item.lyDo || 'Không có lý do' }}
-                </p>
-                <p class="text-muted small mb-0">
-                  <i class="fas fa-clock me-1"></i>{{ formatDateTime(item.ngayYeuCau) }}
                 </p>
               </div>
 
-              <!-- Số tiền hoàn -->
+              <!-- Số tiền -->
               <div class="text-end">
-                <div class="small text-muted">Tổng hoàn</div>
-                <div class="fs-5 fw-bold text-success">{{ formatCurrency(item.tongTienHoan) }}</div>
-                <div class="small text-muted mt-1">{{ item.chiTiets?.length || 0 }} sản phẩm</div>
+                <template v-if="item.loaiDoiTra === 'EXCHANGE'">
+                  <div class="small text-muted">Chênh lệch (bù/hoàn)</div>
+                  <div class="fs-5 fw-bold" :class="item.tienChenhLech >= 0 ? 'text-danger' : 'text-success'">
+                    {{ item.tienChenhLech >= 0 ? '+' : '-' }} {{ formatCurrency(item.tienChenhLech) }}
+                  </div>
+                </template>
+                <template v-else>
+                  <div class="small text-muted">Tổng hoàn</div>
+                  <div class="fs-5 fw-bold text-success">{{ formatCurrency(item.tongTienHoan) }}</div>
+                </template>
+                <button class="btn btn-link btn-sm text-decoration-none p-0 mt-1" @click.stop="viewLogs(item)">
+                  <i class="fas fa-history me-1"></i>Xem nhật ký
+                </button>
               </div>
 
               <!-- Nút thao tác nhanh -->
@@ -223,25 +320,12 @@ onMounted(fetchReturns);
                   <button class="btn btn-success btn-sm rounded-pill px-3" @click="approveRequest(item.id)">
                     <i class="fas fa-check me-1"></i>Duyệt
                   </button>
-                  <button class="btn btn-outline-danger btn-sm rounded-pill px-3" @click="rejectRequest(item.id)">
-                    <i class="fas fa-times me-1"></i>Từ chối
-                  </button>
                 </template>
 
                 <!-- Tab Chờ Gửi Hàng -->
                 <template v-if="item.trangThai === 'CHO_GIAO_HANG'">
                   <button class="btn btn-info btn-sm rounded-pill px-3 text-white" @click="confirmReceived(item.id)">
-                    <i class="fas fa-box me-1"></i>Đã nhận hàng
-                  </button>
-                </template>
-
-                <!-- Tab Kiểm Hàng -->
-                <template v-if="item.trangThai === 'DA_NHAN_HANG_KIEM_TRA'">
-                  <button class="btn btn-success btn-sm rounded-pill px-3" @click="approveRefund(item.id)">
-                    <i class="fas fa-money-bill-wave me-1"></i>Hoàn tiền
-                  </button>
-                  <button class="btn btn-danger btn-sm rounded-pill px-3" @click="rejectAfterCheck(item.id)">
-                    <i class="fas fa-ban me-1"></i>Từ chối
+                    <i class="fas fa-box me-1"></i>Đã nhận
                   </button>
                 </template>
               </div>
@@ -253,115 +337,188 @@ onMounted(fetchReturns);
 
     <!-- Modal Chi Tiết -->
     <div v-if="showDetailModal" class="modal-backdrop fade show" @click="showDetailModal = false"></div>
-    <div class="modal fade" :class="{ show: showDetailModal, 'd-block': showDetailModal }" tabindex="-1">
-      <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content border-0 shadow" v-if="selectedReturn">
+    <div class="modal fade" :class="{ show: showDetailModal, 'd-block': showDetailModal }" tabindex="-1" style="z-index: 1050;">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable shadow-lg">
+        <div class="modal-content border-0" v-if="selectedReturn">
           <div class="modal-header border-0" :class="`bg-${tabs.find(t => t.value === selectedReturn.trangThai)?.color || 'secondary'} bg-opacity-10`">
             <h5 class="modal-title fw-bold">
-              <i class="fas fa-undo-alt me-2"></i>Chi Tiết Đổi Trả: <span class="text-danger">{{ selectedReturn.maDoiTra }}</span>
+              <i class="fas fa-undo-alt me-2"></i>Yêu cầu: <span class="text-danger">{{ selectedReturn.maDoiTra }}</span>
             </h5>
             <button type="button" class="btn-close" @click="showDetailModal = false"></button>
           </div>
-          <div class="modal-body">
+          <div class="modal-body p-4">
             <!-- Thông tin chung -->
-            <div class="row mb-4">
-              <div class="col-md-6">
-                <p class="mb-1 small"><strong>Mã HĐ:</strong> {{ selectedReturn.hoaDon?.maHoaDon }}</p>
-                <p class="mb-1 small"><strong>Ngày yêu cầu:</strong> {{ formatDateTime(selectedReturn.ngayYeuCau) }}</p>
-                <p class="mb-1 small">
-                  <strong>Trạng thái:</strong>
-                  <span :class="['badge rounded-pill px-2 ms-1', STATUS_MAP[selectedReturn.trangThai]?.badge]">
-                    {{ STATUS_MAP[selectedReturn.trangThai]?.text }}
-                  </span>
-                </p>
+            <div class="row g-4 mb-4">
+              <div class="col-md-7">
+                <div class="card bg-light border-0">
+                  <div class="card-body p-3">
+                    <p class="mb-2 small"><strong>Mã HĐ:</strong> {{ selectedReturn.hoaDon?.maHoaDon }}</p>
+                    <p class="mb-2 small"><strong>Ngày yêu cầu:</strong> {{ formatDateTime(selectedReturn.ngayYeuCau) }}</p>
+                    <p class="mb-2 small">
+                      <strong>Loại hình:</strong>
+                      <span :class="['ms-2 fw-bold', LOAI_DOI_TRA[selectedReturn.loaiDoiTra]?.class]">
+                        {{ LOAI_DOI_TRA[selectedReturn.loaiDoiTra]?.text }}
+                      </span>
+                    </p>
+                    <p class="mb-0 small"><strong>Lý do khách ghi:</strong> {{ selectedReturn.lyDo }}</p>
+                  </div>
+                </div>
               </div>
-              <div class="col-md-6">
-                <p class="mb-1 small"><strong>Lý do:</strong> {{ selectedReturn.lyDo || 'Không có' }}</p>
-                <p class="mb-0 small">
-                  <strong>Tổng hoàn:</strong>
-                  <span class="text-success fw-bold fs-5 ms-1">{{ formatCurrency(selectedReturn.tongTienHoan) }}</span>
-                </p>
+              <div class="col-md-5">
+                <div class="card border-danger h-100">
+                  <div class="card-body text-center d-flex flex-column justify-content-center">
+                    <template v-if="selectedReturn.loaiDoiTra === 'EXCHANGE'">
+                      <div class="small text-muted mb-1">Tiền chênh lệch ({{ selectedReturn.tienChenhLech >= 0 ? 'Khách bù' : 'Shop trả' }})</div>
+                      <div class="fs-3 fw-bold" :class="selectedReturn.tienChenhLech >= 0 ? 'text-danger' : 'text-success'">
+                        {{ formatCurrency(selectedReturn.tienChenhLech) }}
+                      </div>
+                    </template>
+                    <template v-else>
+                      <div class="small text-muted mb-1">Tổng tiền hoàn trả</div>
+                      <div class="fs-3 fw-bold text-success">{{ formatCurrency(selectedReturn.tongTienHoan) }}</div>
+                    </template>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <!-- Danh sách sản phẩm hoàn trả -->
-            <h6 class="fw-bold mb-3 border-bottom pb-2">
-              <i class="fas fa-box me-1"></i>Sản phẩm hoàn trả
+            <!-- Danh sách sản phẩm -->
+            <h6 class="fw-bold mb-3 d-flex align-items-center">
+              <i class="fas fa-box me-2 text-secondary"></i>Chi tiết sản phẩm
             </h6>
-            <div class="table-responsive mb-4">
-              <table class="table table-sm table-hover align-middle">
+            <div class="table-responsive mb-4 border rounded">
+              <table class="table table-sm table-hover align-middle mb-0">
                 <thead class="bg-light">
                   <tr>
-                    <th>Sản phẩm</th>
-                    <th class="text-center">SL trả</th>
-                    <th class="text-end">Giá trị hoàn</th>
+                    <th style="width: 40%;">Sản phẩm cũ</th>
+                    <th class="text-center">SL</th>
+                    <th v-if="selectedReturn.loaiDoiTra === 'EXCHANGE'">Đổi sang</th>
+                    <th v-if="selectedReturn.trangThai === 'DA_NHAN_HANG_KIEM_TRA'" class="text-center" style="width: 120px;">Kiểm kho</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="ct in selectedReturn.chiTiets" :key="ct.id">
                     <td>
-                      <div class="fw-bold small">{{ ct.hoaDonChiTiet?.tenSanPham || 'Sản phẩm' }}</div>
-                      <div class="text-muted x-small">
-                        {{ ct.hoaDonChiTiet?.mauSac }} | {{ ct.hoaDonChiTiet?.kichThuoc }}
-                      </div>
+                      <div class="fw-bold small">{{ ct.hoaDonChiTiet?.tenSanPham }}</div>
+                      <div class="text-muted x-small">{{ ct.hoaDonChiTiet?.mauSac }} | {{ ct.hoaDonChiTiet?.kichThuoc }}</div>
                     </td>
                     <td class="text-center fw-bold">{{ ct.soLuongTra }}</td>
-                    <td class="text-end fw-bold text-success">{{ formatCurrency(ct.giaTriHoan) }}</td>
+                    <td v-if="selectedReturn.loaiDoiTra === 'EXCHANGE'">
+                      <div v-if="ct.idSpctMoi" class="text-primary small">
+                        <i class="fas fa-arrow-right me-1"></i> ID Biến thể: {{ ct.idSpctMoi }}
+                      </div>
+                      <div v-else class="text-muted small italic">N/A</div>
+                    </td>
+                    <td v-if="selectedReturn.trangThai === 'DA_NHAN_HANG_KIEM_TRA'" class="text-center">
+                      <div class="form-check form-switch d-inline-block">
+                        <input 
+                          class="form-check-input" 
+                          type="checkbox" 
+                          v-model="qualityCheck[ct.id]"
+                          :id="'qc-' + ct.id"
+                        >
+                        <label class="form-check-label x-small" :for="'qc-' + ct.id">
+                          {{ qualityCheck[ct.id] ? 'Lỗi' : 'Tốt' }}
+                        </label>
+                      </div>
+                    </td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
             <!-- Ảnh minh chứng -->
-            <h6 class="fw-bold mb-3 border-bottom pb-2">
-              <i class="fas fa-camera me-1"></i>Ảnh minh chứng
-            </h6>
-            <div class="d-flex gap-2 flex-wrap mb-3">
+            <h6 class="fw-bold mb-3 border-bottom pb-2">Ảnh minh chứng từ khách</h6>
+            <div class="d-flex gap-2 flex-wrap mb-4">
               <template v-if="parseImages(selectedReturn.danhSachAnh).length">
                 <img
                   v-for="(url, idx) in parseImages(selectedReturn.danhSachAnh)"
                   :key="idx"
                   :src="url"
                   class="rounded-3 border shadow-sm"
-                  style="width: 120px; height: 120px; object-fit: cover; cursor: pointer;"
+                  style="width: 100px; height: 100px; object-fit: cover; cursor: pointer;"
                   @click="window.open(url, '_blank')"
                 >
               </template>
-              <p v-else class="text-muted small">Không có ảnh minh chứng.</p>
+              <p v-else class="text-muted small">Không có ảnh.</p>
+            </div>
+
+            <!-- Ghi chú Admin (Hiện khi cần thao tác hoặc đã hoàn thành) -->
+            <div class="mb-2">
+              <label class="form-label fw-bold small">Ghi chú Admin (Lý do từ chối/Ghi chú kiểm kho):</label>
+              <textarea 
+                v-model="ghiChuAdmin" 
+                class="form-control" 
+                rows="2" 
+                placeholder="Nhập ghi chú tại đây..."
+                :disabled="selectedReturn.trangThai === 'HOAN_THANH' || selectedReturn.trangThai === 'TU_CHOI'"
+              ></textarea>
             </div>
           </div>
 
-          <!-- Footer với nút phân thân theo tab -->
+          <!-- Footer -->
           <div class="modal-footer border-0 bg-light">
-            <!-- Tab Mới -->
+            <button class="btn btn-outline-secondary btn-sm me-auto" @click="viewLogs(selectedReturn)">
+              <i class="fas fa-history me-1"></i>Lịch sử xử lý
+            </button>
+
+            <!-- Thao tác theo tab -->
             <template v-if="selectedReturn.trangThai === 'CHO_XAC_NHAN_HOAN'">
-              <button class="btn btn-outline-danger rounded-pill px-4" @click="rejectRequest(selectedReturn.id)">
-                <i class="fas fa-times me-1"></i>Từ Chối Không Hợp Lệ
-              </button>
-              <button class="btn btn-success rounded-pill px-4 fw-bold" @click="approveRequest(selectedReturn.id)">
-                <i class="fas fa-check me-1"></i>Duyệt
-              </button>
+              <button class="btn btn-outline-danger rounded-pill px-4" @click="rejectRequest(selectedReturn.id)">Từ Chối</button>
+              <button class="btn btn-success rounded-pill px-4 fw-bold" @click="approveRequest(selectedReturn.id)">Duyệt Yêu Cầu</button>
             </template>
 
-            <!-- Tab Chờ Gửi Hàng -->
             <template v-if="selectedReturn.trangThai === 'CHO_GIAO_HANG'">
-              <button class="btn btn-info rounded-pill px-4 fw-bold text-white" @click="confirmReceived(selectedReturn.id)">
-                <i class="fas fa-box me-1"></i>Xác Nhận Đã Nhận Đồ Kho
-              </button>
+              <button class="btn btn-info rounded-pill px-4 fw-bold text-white" @click="confirmReceived(selectedReturn.id)">Xác Nhận Đã Nhận Hàng</button>
             </template>
 
-            <!-- Tab Kiểm Hàng -->
             <template v-if="selectedReturn.trangThai === 'DA_NHAN_HANG_KIEM_TRA'">
-              <button class="btn btn-danger rounded-pill px-4 fw-bold" @click="rejectAfterCheck(selectedReturn.id)">
-                <i class="fas fa-ban me-1"></i>Vứt Bỏ, Trả Lại Khách Chịu Ship
-              </button>
-              <button class="btn btn-success rounded-pill px-4 fw-bold" @click="approveRefund(selectedReturn.id)">
-                <i class="fas fa-money-bill-wave me-1"></i>Duyệt Lệnh Hoàn Tiền
-              </button>
+              <button class="btn btn-outline-danger rounded-pill px-4" @click="rejectAfterCheck(selectedReturn.id)">Từ Chối (Trả hàng khách)</button>
+              <button class="btn btn-success rounded-pill px-4 fw-bold" @click="approveDecision(selectedReturn.id)">Hoàn Tất Phê Duyệt</button>
             </template>
 
-            <!-- Tab Hoàn Thành / Từ Chối: Chỉ nút đóng -->
+            <button 
+              v-if="!['HOAN_THANH', 'TU_CHOI', 'CANCELLED'].includes(selectedReturn.trangThai)"
+              class="btn btn-dark rounded-pill px-4" 
+              @click="cancelRequest(selectedReturn.id)"
+            >
+              Hủy Yêu Cầu
+            </button>
+
+            <button 
+              v-if="selectedReturn.trangThaiThanhToan === 'CHUA_THANH_TOAN'"
+              class="btn btn-warning rounded-pill px-4 fw-bold" 
+              @click="confirmPaymentManual(selectedReturn.id)"
+            >
+              <i class="fas fa-check-double me-1"></i> Xác nhận đã thanh toán/hoàn
+            </button>
+
             <button type="button" class="btn btn-light rounded-pill px-4" @click="showDetailModal = false">Đóng</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal Nhật Ký (Log) -->
+    <div v-if="showLogModal" class="modal-backdrop fade show" style="z-index: 1070;" @click="showLogModal = false"></div>
+    <div class="modal fade" :class="{ show: showLogModal, 'd-block': showLogModal }" tabindex="-1" style="z-index: 1080;">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+          <div class="modal-header bg-dark text-white border-0">
+            <h5 class="modal-title fw-bold small"><i class="fas fa-history me-2"></i>Nhật ký xử lý đơn</h5>
+            <button type="button" class="btn-close btn-close-white" @click="showLogModal = false"></button>
+          </div>
+          <div class="modal-body p-0" style="max-height: 500px; overflow-y: auto;">
+            <ul class="list-group list-group-flush">
+              <li v-for="log in returnLogs" :key="log.id" class="list-group-item p-3 border-0 border-bottom">
+                <div class="d-flex justify-content-between align-items-start mb-1">
+                  <span class="badge bg-secondary x-small">{{ log.hanhDong }}</span>
+                  <span class="text-muted x-small">{{ formatDateTime(log.ngayTao) }}</span>
+                </div>
+                <div class="small text-dark">{{ log.chiTiet }}</div>
+              </li>
+              <li v-if="returnLogs.length === 0" class="list-group-item text-center py-4 text-muted small">Chưa có lịch sử.</li>
+            </ul>
           </div>
         </div>
       </div>
