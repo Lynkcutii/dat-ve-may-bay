@@ -1,11 +1,13 @@
 ﻿<script setup>
 import { computed, ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import axios from 'axios';
 import { useAuthStore } from '@/stores/auth';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
 const authStore = useAuthStore();
 const router = useRouter();
+const route = useRoute();
 const apiBaseUrl = 'http://localhost:8080/api/user';
 
 const activeTab = ref('info');
@@ -288,7 +290,7 @@ const saveAddress = async () => {
     !addressForm.value.huyenId ||
     !addressForm.value.xaId
   ) {
-    alert('Vui lòng nhập đầy đủ thông tin địa chỉ!');
+    ElMessage.warning('Vui lòng nhập đầy đủ thông tin địa chỉ!');
     return;
   }
 
@@ -299,34 +301,43 @@ const saveAddress = async () => {
       xaId: Number(addressForm.value.xaId)
     });
     showAddressModal.value = false;
+    ElMessage.success('Lưu địa chỉ thành công!');
     await fetchAddresses();
   } catch (error) {
     console.error('Error saving address:', error);
-    alert('Không thể lưu địa chỉ. Vui lòng thử lại.');
+    ElMessage.error('Không thể lưu địa chỉ. Vui lòng thử lại.');
   } finally {
     savingAddress.value = false;
   }
 };
 
 const deleteAddress = async (id) => {
-  if (!confirm('Bạn có chắc chắn muốn xóa địa chỉ này?')) return;
-
   try {
+    await ElMessageBox.confirm('Bạn có chắc chắn muốn xóa địa chỉ này?', 'Xác nhận', {
+      confirmButtonText: 'Xóa',
+      cancelButtonText: 'Hủy',
+      type: 'warning'
+    });
+    
     await axios.delete(`${apiBaseUrl}/addresses/${authStore.currentUser.id}/${id}`);
+    ElMessage.success('Đã xóa địa chỉ.');
     await fetchAddresses();
   } catch (error) {
-    console.error('Error deleting address:', error);
-    alert('Không thể xóa địa chỉ.');
+    if (error !== 'cancel') {
+      console.error('Error deleting address:', error);
+      ElMessage.error('Không thể xóa địa chỉ.');
+    }
   }
 };
 
 const setDefaultAddress = async (id) => {
   try {
     await axios.put(`${apiBaseUrl}/addresses/${authStore.currentUser.id}/${id}/default`);
+    ElMessage.success('Đã đặt địa chỉ mặc định.');
     await fetchAddresses();
   } catch (error) {
     console.error('Error setting default address:', error);
-    alert('Không thể đặt địa chỉ mặc định.');
+    ElMessage.error('Không thể đặt địa chỉ mặc định.');
   }
 };
 
@@ -336,15 +347,15 @@ const handleUpdateProfile = async () => {
       hoTen: userForm.value.hoTen,
       soDienThoai: userForm.value.soDienThoai
     });
-    alert('Cập nhật thông tin thành công!');
+    ElMessage.success('Cập nhật thông tin thành công!');
   } catch (error) {
-    alert(error);
+    ElMessage.error(error.toString());
   }
 };
 
 const handleChangePassword = async () => {
   if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
-    alert('Mật khẩu xác nhận không khớp!');
+    ElMessage.warning('Mật khẩu xác nhận không khớp!');
     return;
   }
 
@@ -353,17 +364,25 @@ const handleChangePassword = async () => {
       oldPassword: passwordForm.value.oldPassword,
       newPassword: passwordForm.value.newPassword
     });
-    alert('Đổi mật khẩu thành công!');
+    ElMessage.success('Đổi mật khẩu thành công!');
     passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' };
   } catch (error) {
-    alert(error);
+    ElMessage.error(error.toString());
   }
 };
 
-const handleLogout = () => {
-  if (confirm('Bạn có chắc chắn muốn đăng xuất?')) {
+const handleLogout = async () => {
+  try {
+    await ElMessageBox.confirm('Bạn có chắc chắn muốn đăng xuất?', 'Xác nhận', {
+      confirmButtonText: 'Đăng xuất',
+      cancelButtonText: 'Hủy',
+      type: 'info'
+    });
     authStore.logout();
     router.push('/login');
+    ElMessage.success('Đã đăng xuất.');
+  } catch (error) {
+    // Cancelled
   }
 };
 
@@ -371,6 +390,10 @@ onMounted(async () => {
   if (!authStore.isAuthenticated) {
     router.push('/login');
     return;
+  }
+
+  if (route.query.tab === 'address') {
+    activeTab.value = 'address';
   }
 
   await Promise.all([fetchTinh(), fetchAddresses()]);

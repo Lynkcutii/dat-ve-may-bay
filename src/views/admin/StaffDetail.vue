@@ -1,15 +1,24 @@
 <template>
   <div class="container-fluid py-4">
+    <div class="d-flex align-items-center mb-4">
+      <button @click="router.back()" class="btn btn-white shadow-sm rounded-circle me-3">
+        <i class="fas fa-arrow-left text-secondary"></i>
+      </button>
+      <div>
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item small">
+              <router-link to="/admin/staff" class="text-decoration-none text-muted">Nhân viên</router-link>
+            </li>
+            <li class="breadcrumb-item small active" aria-current="page">{{ isEdit ? 'Cập nhật' : 'Thêm mới' }}</li>
+          </ol>
+        </nav>
+        <h4 class="fw-bold mb-0 text-dark">{{ isEdit ? 'CẬP NHẬT NHÂN VIÊN' : 'THÊM NHÂN VIÊN MỚI' }}</h4>
+      </div>
+    </div>
+
     <div class="card border-0 shadow-sm rounded-4">
       <div class="card-body p-4 p-md-5">
-        <!-- Tiêu đề thay đổi theo chế độ -->
-        <div class="d-flex align-items-center mb-5">
-            <button @click="router.back()" class="btn btn-light rounded-circle me-3">
-                <i class="fas fa-arrow-left"></i>
-            </button>
-            <h4 class="fw-bold m-0">{{ isEdit ? 'Cập Nhật Thông Tin Nhân Viên' : 'Thêm Nhân Viên Mới' }}</h4>
-        </div>
-
         <form @submit.prevent="handleSave">
           <div class="row g-4">
             <!-- Ảnh đại diện -->
@@ -120,6 +129,9 @@ onMounted(() => {
 });
 
 const handleSave = () => {
+  if (!isEdit.value && !confirm('Xac nhan them moi nhan vien?')) {
+    return;
+  }
   // Logic lưu dữ liệu (Sau này sẽ gọi API)
   const message = isEdit.value ? 'Cập nhật thành công!' : 'Thêm nhân viên thành công!';
   alert(message);
@@ -128,6 +140,27 @@ const handleSave = () => {
 </script>
 
 <style scoped>
+.btn-white {
+    background: white;
+    border: none;
+    width: 42px;
+    height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+.btn-white:hover {
+    background-color: #f8f9fa;
+    transform: scale(1.05);
+}
+.breadcrumb-item + .breadcrumb-item::before {
+    content: "/";
+}
+.container-fluid {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
 .avatar-preview {
     width: 120px;
     height: 120px;

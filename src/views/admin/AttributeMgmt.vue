@@ -23,29 +23,30 @@ const getItemName = (item, type = '') => {
 };
 
 const normalizeAttributeName = (item, type = '') => {
-  const rawName = getItemName(item, type);
-  if (!rawName.includes('?')) return rawName;
+  return getItemName(item, type);
+};
 
-  const code = String(item.ma ?? item.maThuongHieu ?? '').trim().toUpperCase();
-  if (type === 'colors') {
-    const colorMap = {
-      DEN: 'Đen',
-      TRANG: 'Trắng',
-      DO: 'Đỏ',
-      XANH: 'Xanh',
-      XANH_DUONG: 'Xanh dương',
-      XANH_LA: 'Xanh lá',
-      VANG: 'Vàng',
-      HONG: 'Hồng',
-      TIM: 'Tím',
-      CAM: 'Cam',
-      NAU: 'Nâu',
-      XAM: 'Xám'
-    };
-    return colorMap[code] || rawName;
-  }
+const normalizeForDeduplication = (str) => {
+  if (!str) return '';
+  // Normalize string by removing accents and handling common broken patterns
+  const normalized = str.toString().trim()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
+    .replace(/[?ÃÆÐ]/g, '') // remove broken chars
+    .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .toUpperCase();
+  return normalized;
+};
 
-  return rawName;
+const deduplicate = (list, type = '') => {
+  if (!list || !Array.isArray(list)) return [];
+  const seen = new Set();
+  return list.filter(item => {
+    const rawName = getItemName(item, type);
+    const normalized = normalizeForDeduplication(rawName);
+    if (!normalized || seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
 };
 
 const fetchAttributes = async () => {
@@ -58,10 +59,10 @@ const fetchAttributes = async () => {
       axios.get(`${apiBaseUrl}/brands`)
     ]);
 
-    attributes.value[0].values = sizesRes.data;
-    attributes.value[1].values = colorsRes.data;
-    attributes.value[2].values = materialsRes.data;
-    attributes.value[3].values = brandsRes.data;
+    attributes.value[0].values = deduplicate(sizesRes.data, 'sizes');
+    attributes.value[1].values = deduplicate(colorsRes.data, 'colors');
+    attributes.value[2].values = deduplicate(materialsRes.data, 'materials');
+    attributes.value[3].values = deduplicate(brandsRes.data, 'brands');
   } catch (error) {
     console.error('Error fetching attributes:', error);
   } finally {
@@ -114,6 +115,10 @@ const buildPayload = () => {
 const saveAttribute = async () => {
   if (!form.value.ten.trim()) {
     alert('Vui lòng nhập tên!');
+    return;
+  }
+
+  if (modalType.value === 'add' && !confirm('Xac nhan them moi thuoc tinh?')) {
     return;
   }
 

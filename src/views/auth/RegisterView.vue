@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -27,10 +28,12 @@ const handleRegister = async () => {
       soDienThoai: soDienThoai.value,
       matKhau: matKhau.value
     });
-    alert("Đăng ký thành công! Vui lòng đăng nhập.");
+    ElMessage.success("Đăng ký thành công! Vui lòng đăng nhập.");
     router.push('/login');
   } catch (err) {
-    error.value = typeof err === 'string' ? err : 'Đăng ký thất bại. Vui lòng thử lại!';
+    const msg = typeof err === 'string' ? err : 'Đăng ký thất bại. Vui lòng thử lại!';
+    error.value = msg;
+    ElMessage.error(msg);
   }
 };
 </script>

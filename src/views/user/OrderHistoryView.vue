@@ -18,9 +18,9 @@
             <button class="nav-link active border-0 text-start rounded-3 mb-lg-2 me-2 me-lg-0 px-3 py-2 fw-bold shadow-none text-nowrap">
               <i class="fas fa-history me-2"></i> Lịch sử đơn hàng
             </button>
-            <button class="nav-link text-dark text-start rounded-3 mb-lg-2 me-2 me-lg-0 px-3 py-2 fw-bold text-nowrap">
+            <router-link to="/account?tab=address" class="nav-link text-dark text-start rounded-3 mb-lg-2 me-2 me-lg-0 px-3 py-2 fw-bold text-nowrap">
               <i class="fas fa-map-marker-alt me-2"></i> Sổ địa chỉ
-            </button>
+            </router-link>
             <div class="d-none d-lg-block"><hr></div>
             <button @click="handleLogout" class="nav-link text-danger text-start rounded-3 px-3 py-2 fw-bold text-nowrap">
               <i class="fas fa-sign-out-alt me-2"></i> Đăng xuất
@@ -57,9 +57,14 @@
               <div v-for="order in filteredOrders" :key="order.id" class="order-item border rounded-4 p-3 mb-4 p-md-4">
                 <div class="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom flex-wrap gap-2">
                   <span class="fw-bold small">Mã đơn: <span class="text-danger">#{{ order.maHoaDon }}</span></span>
-                  <span :class="['badge small px-3 py-2 border', getStatusClass(order.trangThaiDon)]">
-                    {{ formatStatus(order.trangThaiDon) }}
-                  </span>
+                  <div class="d-flex gap-2 align-items-center">
+                    <span v-if="order.loaiDonHang === 'TAI_QUAY'" class="badge small px-3 py-2 border bg-light text-warning border-warning">
+                      Tại quầy
+                    </span>
+                    <span :class="['badge small px-3 py-2 border', getStatusClass(order.trangThaiDon)]">
+                      {{ formatStatus(order.trangThaiDon) }}
+                    </span>
+                  </div>
                 </div>
                 
                 <div class="d-flex justify-content-between align-items-center pt-3 flex-wrap gap-3">
@@ -68,7 +73,7 @@
                     <p class="mb-0 small fw-bold">Tổng thanh toán: <span class="text-danger fs-5">{{ formatPrice(order.tongThanhToan) }}</span></p>
                   </div>
                   <div class="d-flex gap-2">
-                    <button @click="viewDetail(order.id)" class="btn btn-outline-dark btn-sm rounded-pill px-4 fw-bold">CHI TIẾT</button>
+                    <button @click="viewDetail(order)" class="btn btn-outline-dark btn-sm rounded-pill px-4 fw-bold">CHI TIẾT</button>
                   </div>
                 </div>
               </div>
@@ -124,7 +129,6 @@ const handleLogout = () => {
 
 const tabs = [
   { label: 'Tất cả', value: 'ALL' },
-  { label: 'Đã đặt', value: 'DA_DAT' },
   { label: 'Chờ xác nhận', value: 'CHO_XAC_NHAN' },
   { label: 'Đã xác nhận', value: 'DA_XAC_NHAN' },
   { label: 'Đang giao', value: 'DANG_GIAO' },
@@ -167,7 +171,6 @@ const formatDate = (dateStr) => {
 
 const formatStatus = (status) => {
   const map = {
-    'DA_DAT': 'Đã đặt',
     'CHO_XAC_NHAN': 'Chờ xác nhận',
     'DA_XAC_NHAN': 'Đã xác nhận',
     'DANG_GIAO': 'Đang giao',
@@ -181,11 +184,16 @@ const formatStatus = (status) => {
 const getStatusClass = (status) => {
   if (status === 'DA_GIAO') return 'bg-light text-success border-success';
   if (status === 'DA_HUY') return 'bg-light text-danger border-danger';
+  if (status === 'HOAN_TRA') return 'bg-light text-warning border-warning';
   return 'bg-light text-primary border-primary';
 };
 
-const viewDetail = (orderId) => {
-  router.push(`/order/${orderId}`);
+const viewDetail = (order) => {
+  if (activeTab.value === 'HOAN_TRA' || order.hoanTra != null) {
+    router.push(`/order/return/${order.id}`);
+  } else {
+    router.push(`/order/${order.id}`);
+  }
 };
 </script>
 
@@ -197,3 +205,5 @@ const viewDetail = (orderId) => {
   color: #fff !important;
 }
 </style>
+
+

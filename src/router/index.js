@@ -9,10 +9,12 @@ const router = createRouter({
     { path: '/contact', component: () => import('../views/user/ContactView.vue') },
     { path: '/products', component: () => import('../views/user/ProductListView.vue') },
     { path: '/product/:id', component: () => import('../views/user/ProductDetailView.vue') },
+    { path: '/product-detail/:id', redirect: to => `/product/${to.params.id}` },
     { path: '/cart', component: () => import('../views/user/CartView.vue') },
     { path: '/account', component: () => import('../views/user/AccountView.vue') },
     { path: '/order-history', component: () => import('../views/user/OrderHistoryView.vue') },
     { path: '/order/:id', component: () => import('../views/user/OrderDetailView.vue') },
+    { path: '/order/return/:id', component: () => import('../views/user/ReturnDetailView.vue') },
     { path: '/wishlist', component: () => import('../views/user/WishlistView.vue') },
     { path: '/checkout', component: () => import('../views/user/CheckoutView.vue') },
     // --- AUTH ---
@@ -40,6 +42,7 @@ const router = createRouter({
         { path: 'staff/edit/:id', component: () => import('../views/admin/StaffDetail.vue'), props: true },
 
         { path: 'revenue', component: () => import('../views/admin/RevenueMgmt.vue') },
+        { path: 'returns', component: () => import('../views/admin/ReturnManagement.vue') },
         { path: 'pos', component: () => import('../views/admin/POSView.vue') },
         
         { path: 'vouchers', component: () => import('../views/admin/VoucherMgmt.vue') },
