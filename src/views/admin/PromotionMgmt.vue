@@ -109,8 +109,14 @@ const confirmDelete = async (id, name) => {
                   </span>
                 </td>
                 <td class="text-end pe-4">
-                  <router-link :to="'/admin/promotions/edit/' + p.id" class="btn btn-sm btn-outline-primary me-2"><i class="fas fa-edit"></i></router-link>
-                  <button @click="confirmDelete(p.id, p.name)" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                  <div class="d-flex justify-content-end gap-2">
+                    <router-link :to="'/admin/promotions/edit/' + p.id" class="btn btn-icon btn-light rounded-circle shadow-sm" title="Sửa">
+                      <i class="fas fa-edit text-primary"></i>
+                    </router-link>
+                    <button @click="confirmDelete(p.id, p.name)" class="btn btn-icon btn-light rounded-circle shadow-sm" title="Xóa">
+                      <i class="fas fa-trash text-danger"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -120,3 +126,27 @@ const confirmDelete = async (id, name) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.table thead th {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 15px 10px;
+}
+.table tbody td {
+  padding: 15px 10px;
+}
+.btn-icon {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s;
+}
+.btn-icon:hover {
+  transform: translateY(-2px);
+}
+</style>

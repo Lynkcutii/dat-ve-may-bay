@@ -9,12 +9,15 @@ const router = createRouter({
     { path: '/contact', component: () => import('../views/user/ContactView.vue') },
     { path: '/products', component: () => import('../views/user/ProductListView.vue') },
     { path: '/product/:id', component: () => import('../views/user/ProductDetailView.vue') },
+    { path: '/product-detail/:id', redirect: to => `/product/${to.params.id}` },
     { path: '/cart', component: () => import('../views/user/CartView.vue') },
     { path: '/account', component: () => import('../views/user/AccountView.vue') },
     { path: '/order-history', component: () => import('../views/user/OrderHistoryView.vue') },
     { path: '/order/:id', component: () => import('../views/user/OrderDetailView.vue') },
+    { path: '/order/return/:id', component: () => import('../views/user/ReturnDetailView.vue') },
     { path: '/wishlist', component: () => import('../views/user/WishlistView.vue') },
     { path: '/checkout', component: () => import('../views/user/CheckoutView.vue') },
+    { path: '/return/confirm', component: () => import('../views/user/ReturnConfirmView.vue') },
     // --- AUTH ---
     { path: '/login', component: () => import('../views/auth/LoginView.vue') },
     { path: '/register', component: () => import('../views/auth/RegisterView.vue') },
@@ -40,6 +43,8 @@ const router = createRouter({
         { path: 'staff/edit/:id', component: () => import('../views/admin/StaffDetail.vue'), props: true },
 
         { path: 'revenue', component: () => import('../views/admin/RevenueMgmt.vue') },
+        { path: 'returns', component: () => import('../views/admin/ReturnManagement.vue') },
+        { path: 'return-policy', component: () => import('../views/admin/ReturnPolicySettings.vue') },
         { path: 'pos', component: () => import('../views/admin/POSView.vue') },
         
         { path: 'vouchers', component: () => import('../views/admin/VoucherMgmt.vue') },
@@ -51,7 +56,7 @@ const router = createRouter({
         { path: 'promotions/edit/:id', component: () => import('../views/admin/PromotionDetail.vue'), props: true },
 
         { path: 'attributes', component: () => import('../views/admin/AttributeMgmt.vue') },
-        { path: 'returns', component: () => import('../views/admin/ReturnManagement.vue') },
+        { path: 'kho-loi', component: () => import('../views/admin/HangLoiManagement.vue') },
       ]
     }
   ]

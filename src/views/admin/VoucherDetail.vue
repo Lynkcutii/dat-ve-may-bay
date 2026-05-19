@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import axios from 'axios';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
 const props = defineProps(['id']);
 const router = useRouter();
@@ -32,30 +33,71 @@ onMounted(async () => {
       };
     } catch (error) {
       console.error("Error fetching voucher:", error);
+      ElMessage.error("Không thể tải thông tin voucher");
     }
+  } else {
+    // Tự động tạo mã voucher
+    voucher.value.maCode = 'VOUCHER' + Date.now();
   }
 });
 
 const handleSave = async () => {
   try {
-    await axios.post('http://localhost:8080/api/admin/vouchers', voucher.value);
-    alert("Lưu voucher thành công!");
+    if (!isEdit.value) {
+      await ElMessageBox.confirm(
+        'Xác nhận thêm mới voucher này?',
+        'Xác nhận',
+        {
+          confirmButtonText: 'Đồng ý',
+          cancelButtonText: 'Hủy bỏ',
+          type: 'info',
+        }
+      );
+    }
+
+    // Format lại ngày tháng để phù hợp với LocalDateTime của Backend
+    const payload = {
+      ...voucher.value,
+      ngayBatDau: voucher.value.ngayBatDau ? `${voucher.value.ngayBatDau}T00:00:00` : null,
+      ngayKetHuc: voucher.value.ngayKetHuc ? `${voucher.value.ngayKetHuc}T23:59:59` : null
+    };
+
+    await axios.post('http://localhost:8080/api/admin/vouchers', payload);
+    ElMessage.success(isEdit.value ? "Cập nhật voucher thành công!" : "Thêm mới voucher thành công!");
     router.push('/admin/vouchers');
   } catch (error) {
-    alert("Lưu thất bại!");
+    if (error !== 'cancel') {
+      console.error("Lỗi khi lưu voucher:", error.response?.data);
+      ElMessage.error(error.response?.data?.message || "Lưu thất bại, vui lòng kiểm tra lại!");
+    }
   }
 };
 </script>
 
 <template>
-  <div class="voucher-detail p-4">
-    <h4 class="fw-bold mb-4">{{ isEdit ? 'Sửa Voucher' : 'Thêm Voucher' }}</h4>
-    <div class="card border-0 shadow-sm p-4">
+  <div class="voucher-detail container-fluid py-4">
+    <div class="d-flex align-items-center mb-4">
+      <button @click="router.back()" class="btn btn-white shadow-sm rounded-circle me-3">
+        <i class="fas fa-arrow-left text-secondary"></i>
+      </button>
+      <div>
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb mb-1">
+            <li class="breadcrumb-item small">
+              <router-link to="/admin/vouchers" class="text-decoration-none text-muted">Voucher</router-link>
+            </li>
+            <li class="breadcrumb-item small active" aria-current="page">{{ isEdit ? 'Chỉnh sửa' : 'Thêm mới' }}</li>
+          </ol>
+        </nav>
+        <h4 class="fw-bold mb-0 text-dark">{{ isEdit ? 'SỬA VOUCHER' : 'THÊM VOUCHER MỚI' }}</h4>
+      </div>
+    </div>
+    <div class="card border-0 shadow-sm p-4 rounded-4">
       <form @submit.prevent="handleSave">
         <div class="row g-3">
           <div class="col-md-6">
             <label class="form-label">Mã Voucher</label>
-            <input type="text" v-model="voucher.maCode" class="form-control" required>
+            <input type="text" v-model="voucher.maCode" class="form-control bg-light" readonly placeholder="Mã tự động">
           </div>
           <div class="col-md-6">
             <label class="form-label">Kiểu giảm giá</label>
@@ -103,3 +145,30 @@ const handleSave = async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.btn-white {
+  background: white;
+  border: none;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-white:hover {
+  background-color: #f8f9fa;
+  transform: scale(1.05);
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+  content: "/";
+}
+
+.voucher-detail {
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+</style>

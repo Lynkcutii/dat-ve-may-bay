@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useRouter } from 'vue-router';
+import { ElMessage } from 'element-plus';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -22,10 +23,12 @@ const handleForgotPassword = async () => {
   loading.value = true;
   try {
     await authStore.forgotPassword(email.value, newPassword.value);
-    alert("Đổi mật khẩu thành công!");
+    ElMessage.success("Đổi mật khẩu thành công!");
     router.push('/login');
   } catch (err) {
-    error.value = typeof err === 'string' ? err : 'Có lỗi xảy ra, vui lòng thử lại!';
+    const msg = typeof err === 'string' ? err : 'Có lỗi xảy ra, vui lòng thử lại!';
+    error.value = msg;
+    ElMessage.error(msg);
   } finally {
     loading.value = false;
   }

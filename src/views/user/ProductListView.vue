@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useWishlistStore } from '@/stores/wishlist';
 import { useAuthStore } from '@/stores/auth';
 import { API_BASE_URL } from '@/config';
+import { ElMessage } from 'element-plus';
 
 const route = useRoute();
 const router = useRouter();
@@ -56,7 +57,7 @@ onMounted(() => {
 
 const toggleWishlist = async (product) => {
   if (!authStore.isAuthenticated) {
-    alert('Vui lòng đăng nhập để dùng danh sách yêu thích!');
+    ElMessage.warning('Vui lòng đăng nhập để dùng danh sách yêu thích!');
     router.push('/login');
     return;
   }

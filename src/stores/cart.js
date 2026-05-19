@@ -57,6 +57,11 @@ export const useCartStore = defineStore('cart', {
         await this.fetchCart();
       } catch (error) {
         console.error("Error adding to cart:", error.response?.data || error.message);
+        error.message =
+          error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error?.response?.data ||
+          error.message;
         throw error;
       }
     },

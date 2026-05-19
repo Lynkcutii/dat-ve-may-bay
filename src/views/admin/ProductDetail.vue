@@ -20,7 +20,8 @@ const product = ref({
   trangThai: true,
   moTa: '',
   danhMuc: { id: null, ten: '' },
-  thuongHieu: { id: null, tenThuongHieu: '' }
+  thuongHieu: { id: null, tenThuongHieu: '' },
+  chatLieu: { id: null, ten: '' }
 });
 
 const variantDetails = ref([]);
@@ -70,6 +71,9 @@ const fetchCategories = async () => {
   try {
     const res = await axios.get(`${apiBaseUrl}/categories`);
     categories.value = res.data;
+    if (!isEdit.value && categories.value.length > 0 && product.value.danhMuc.id === null) {
+      product.value.danhMuc.id = categories.value[0].id;
+    }
   } catch (error) {
     console.error('Error fetching categories:', error);
   }
@@ -79,6 +83,9 @@ const fetchBrands = async () => {
   try {
     const res = await axios.get(`${apiBaseUrl}/brands`);
     brands.value = res.data;
+    if (!isEdit.value && brands.value.length > 0 && product.value.thuongHieu.id === null) {
+      product.value.thuongHieu.id = brands.value[0].id;
+    }
   } catch (error) {
     console.error('Error fetching brands:', error);
   }
@@ -106,6 +113,9 @@ const fetchMaterials = async () => {
   try {
     const res = await axios.get(`${apiBaseUrl}/materials`);
     materials.value = res.data;
+    if (!isEdit.value && materials.value.length > 0 && product.value.chatLieu.id === null) {
+      product.value.chatLieu.id = materials.value[0].id;
+    }
   } catch (error) {
     console.error('Error fetching materials:', error);
   }
@@ -127,7 +137,7 @@ const updateVariantSummary = () => {
 
   variantSummary.value.sizes = [...new Set(details.map(d => d.kichThuoc?.ten || getAttrTen(d.kichThuoc?.id, sizes.value, 'ten')))].filter(Boolean).join(', ');
   variantSummary.value.colors = [...new Set(details.map(d => d.mauSac?.ten || getAttrTen(d.mauSac?.id, colors.value, 'ten')))].filter(Boolean).join(', ');
-  variantSummary.value.materials = [...new Set(details.map(d => d.chatLieu?.ten || getAttrTen(d.chatLieu?.id, materials.value, 'ten')))].filter(Boolean).join(', ');
+  variantSummary.value.materials = product.value.chatLieu?.ten || getAttrTen(product.value.chatLieu?.id, materials.value, 'ten') || '';
   variantSummary.value.totalStock = details.reduce((sum, d) => sum + (Number(d.soLuong) || 0), 0);
 
   const prices = details.map(d => Number(d.giaBan)).filter(p => p > 0);
@@ -151,7 +161,8 @@ const fetchProduct = async () => {
 
     product.value = {
       ...data.product,
-      thuongHieu: data.product.thuongHieu || { id: null, tenThuongHieu: '' }
+      thuongHieu: data.product.thuongHieu || { id: null, tenThuongHieu: '' },
+      chatLieu: data.product.chatLieu || { id: null, ten: '' }
     };
 
     variantDetails.value = (data.details || []).map(detail => ({
@@ -205,8 +216,8 @@ const saveProduct = async () => {
     return;
   }
 
-  if (!product.value.danhMuc.id || !product.value.thuongHieu.id) {
-    alert('Vui lòng chọn Danh mục và Thương hiệu cho sản phẩm!');
+  if (!product.value.danhMuc.id || !product.value.thuongHieu.id || !product.value.chatLieu.id) {
+    alert('Vui lòng chọn Danh mục, Thương hiệu và Chất liệu cho sản phẩm!');
     return;
   }
 
@@ -216,7 +227,7 @@ const saveProduct = async () => {
   }
 
   for (const v of variantDetails.value) {
-    if (!v.mauSac?.id || !v.kichThuoc?.id || !v.chatLieu?.id) {
+    if (!v.mauSac?.id || !v.kichThuoc?.id) {
       alert('Vui lòng chọn đầy đủ thuộc tính cho tất cả các biến thể!');
       return;
     }
@@ -224,6 +235,10 @@ const saveProduct = async () => {
       alert('Giá bán và số lượng biến thể không hợp lệ!');
       return;
     }
+  }
+
+  if (!props.id && !confirm('Xac nhan them moi san pham?')) {
+    return;
   }
 
   try {
@@ -264,10 +279,13 @@ const removeImage = (index) => {
 };
 
 const addNewVariant = () => {
+  const defaultColorId = colors.value.length > 0 ? colors.value[0].id : null;
+  const defaultSizeId = sizes.value.length > 0 ? sizes.value[0].id : null;
+
   variantDetails.value.push({
-    mauSac: { id: null },
-    kichThuoc: { id: null },
-    chatLieu: { id: null },
+    ma: 'SPCT' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0'),
+    mauSac: { id: defaultColorId },
+    kichThuoc: { id: defaultSizeId },
     giaBan: product.value.giaGoc || 0,
     soLuong: 0,
     trangThai: true
@@ -279,13 +297,23 @@ const removeVariant = (index) => {
   updateVariantSummary();
 };
 
-onMounted(() => {
-  fetchCategories();
-  fetchBrands();
-  fetchColors();
-  fetchSizes();
-  fetchMaterials();
-  fetchProduct();
+onMounted(async () => {
+  await Promise.all([
+    fetchCategories(),
+    fetchBrands(),
+    fetchColors(),
+    fetchSizes(),
+    fetchMaterials()
+  ]);
+  
+  await fetchProduct();
+
+  if (!isEdit.value) {
+    product.value.ma = 'SP' + Date.now().toString().slice(-8);
+    if (variantDetails.value.length === 0) {
+      addNewVariant();
+    }
+  }
 });
 </script>
 
@@ -332,22 +360,29 @@ onMounted(() => {
                 <label class="info-label">Mã sản phẩm</label>
                 <input v-model="product.ma" type="text" class="form-control border-0 bg-light rounded-3 py-2 px-3 fw-bold text-primary" placeholder="Nhập mã sản phẩm" :readonly="isReadOnly">
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label class="info-label">Tên sản phẩm</label>
                 <input v-model="product.tenSanPham" type="text" class="form-control border-0 bg-light rounded-3 py-2 px-3 fw-bold" placeholder="Nhập tên sản phẩm" :readonly="isReadOnly">
               </div>
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="info-label">Danh mục</label>
                 <select v-model="product.danhMuc.id" class="form-select border-0 bg-light rounded-3 py-2 px-3" :disabled="isReadOnly">
                   <option :value="null">Chọn danh mục</option>
                   <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ cat.ten }}</option>
                 </select>
               </div>
-              <div class="col-md-3">
+              <div class="col-md-2">
                 <label class="info-label">Thương hiệu</label>
                 <select v-model="product.thuongHieu.id" class="form-select border-0 bg-light rounded-3 py-2 px-3" :disabled="isReadOnly">
                   <option :value="null">Chọn thương hiệu</option>
                   <option v-for="brand in brands" :key="brand.id" :value="brand.id">{{ brand.tenThuongHieu }}</option>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="info-label">Chất liệu</label>
+                <select v-model="product.chatLieu.id" class="form-select border-0 bg-light rounded-3 py-2 px-3" :disabled="isReadOnly" @change="updateVariantSummary">
+                  <option :value="null">Chọn chất liệu</option>
+                  <option v-for="m in materials" :key="m.id" :value="m.id">{{ m.ten }}</option>
                 </select>
               </div>
             </div>
@@ -384,9 +419,9 @@ onMounted(() => {
                   <table class="table table-hover align-middle mb-0 small text-center">
                     <thead class="bg-light">
                       <tr>
+                        <th style="width: 150px;">Mã biến thể</th>
                         <th>Màu sắc</th>
                         <th>Kích thước</th>
-                        <th>Chất liệu</th>
                         <th style="width: 150px;">Giá bán (₫)</th>
                         <th style="width: 120px;">Số lượng</th>
                         <th class="text-end pe-3">Thao tác</th>
@@ -394,6 +429,9 @@ onMounted(() => {
                     </thead>
                     <tbody>
                       <tr v-for="(v, index) in variantDetails" :key="index">
+                        <td>
+                          <input v-model="v.ma" type="text" class="form-control form-control-sm border-0 bg-light text-primary fw-bold font-monospace" readonly placeholder="Mã tự động">
+                        </td>
                         <td>
                           <select v-model="v.mauSac.id" class="form-select form-select-sm border-0 bg-light" :disabled="isReadOnly" @change="updateVariantSummary">
                             <option :value="null">Màu sắc</option>
@@ -404,12 +442,6 @@ onMounted(() => {
                           <select v-model="v.kichThuoc.id" class="form-select form-select-sm border-0 bg-light" :disabled="isReadOnly" @change="updateVariantSummary">
                             <option :value="null">Kích thước</option>
                             <option v-for="s in sizes" :key="s.id" :value="s.id">{{ s.ten }}</option>
-                          </select>
-                        </td>
-                        <td>
-                          <select v-model="v.chatLieu.id" class="form-select form-select-sm border-0 bg-light" :disabled="isReadOnly" @change="updateVariantSummary">
-                            <option :value="null">Chất liệu</option>
-                            <option v-for="m in materials" :key="m.id" :value="m.id">{{ m.ten }}</option>
                           </select>
                         </td>
                         <td>
@@ -530,11 +562,21 @@ onMounted(() => {
 .btn-white {
   background: white;
   border: none;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-white:hover {
+  background-color: #f8f9fa;
+  transform: scale(1.05);
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+  content: "/";
 }
 
 .border-dashed {

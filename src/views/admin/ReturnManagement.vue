@@ -1,8 +1,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import axios from 'axios';
-
-const apiBaseUrl = 'http://localhost:8080/api/admin/doi-tra';
+import { ElMessage } from 'element-plus';
+import returnApi from '@/api/returnApi';
+import RefundBreakdown from '@/components/RefundBreakdown.vue';
+import KiemHangModal from '@/components/admin/KiemHangModal.vue';
+import HoanTienModal from '@/components/admin/HoanTienModal.vue';
 
 const allReturns = ref([]);
 const loading = ref(true);
@@ -12,13 +14,15 @@ const showDetailModal = ref(false);
 const showLogModal = ref(false);
 const returnLogs = ref([]);
 const ghiChuAdmin = ref('');
-const qualityCheck = ref({}); // { id_dtct: true/false }
+const showKiemModal = ref(false);
+const showHoanTienModal = ref(false);
 
 const tabs = [
   { label: 'Yêu Cầu Mới', value: 'CHO_XAC_NHAN_HOAN', icon: 'fas fa-inbox', color: 'warning' },
   { label: 'Chờ Gửi Hàng', value: 'CHO_GIAO_HANG', icon: 'fas fa-shipping-fast', color: 'info' },
   { label: 'Kiểm Hàng Nội Bộ', value: 'DA_NHAN_HANG_KIEM_TRA', icon: 'fas fa-search', color: 'primary' },
   { label: 'Hoàn Thành', value: 'HOAN_THANH', icon: 'fas fa-check-circle', color: 'success' },
+  { label: 'Kháng Nghị', value: 'KHANG_NGHI', icon: 'fas fa-gavel', color: 'warning' },
   { label: 'Từ Chối', value: 'TU_CHOI', icon: 'fas fa-times-circle', color: 'danger' }
 ];
 
@@ -32,30 +36,82 @@ const STATUS_MAP = {
   CHO_GIAO_HANG: { text: 'Chờ gửi hàng', badge: 'bg-info text-white' },
   DA_NHAN_HANG_KIEM_TRA: { text: 'Đang kiểm tra', badge: 'bg-primary text-white' },
   HOAN_THANH: { text: 'Hoàn thành', badge: 'bg-success text-white' },
+  KHANG_NGHI: { text: 'Kháng nghị', badge: 'bg-warning text-white' },
   TU_CHOI: { text: 'Từ chối', badge: 'bg-danger text-white' },
   CANCELLED: { text: 'Đã hủy', badge: 'bg-secondary text-white' }
 };
 
 const STATUS_PAYMENT_MAP = {
   CHUA_THANH_TOAN: { text: 'Chưa thanh toán/hoàn', badge: 'bg-light text-danger border-danger' },
+  CHO_HOAN_TIEN: { text: 'Chờ hoàn tiền', badge: 'bg-warning text-dark' },
   DA_THANH_TOAN: { text: 'Đã thanh toán/hoàn', badge: 'bg-success text-white' },
+  DA_XAC_NHAN_NHAN: { text: 'Khách đã xác nhận nhận tiền', badge: 'bg-primary text-white' },
   KHONG_CAN_THANH_TOAN: { text: 'Không phát sinh tiền', badge: 'bg-light text-muted' }
 };
 
+const RETURN_STATUS_NORMALIZER = {
+  CHO_XAC_NHAN: 'CHO_XAC_NHAN_HOAN',
+  CHO_TRA_HANG: 'CHO_GIAO_HANG',
+  DA_NHAN_HANG: 'DA_NHAN_HANG_KIEM_TRA',
+  CHO_XAC_NHAN_HOAN: 'CHO_XAC_NHAN_HOAN',
+  CHO_GIAO_HANG: 'CHO_GIAO_HANG',
+  DA_NHAN_HANG_KIEM_TRA: 'DA_NHAN_HANG_KIEM_TRA',
+  HOAN_THANH: 'HOAN_THANH',
+  KHANG_NGHI: 'KHANG_NGHI',
+  TU_CHOI: 'TU_CHOI',
+  CANCELLED: 'CANCELLED'
+};
+
+const RETURN_TYPE_NORMALIZER = {
+  HOAN_TIEN: 'REFUND',
+  DOI_HANG: 'EXCHANGE',
+  REFUND: 'REFUND',
+  EXCHANGE: 'EXCHANGE'
+};
+
+const normalizeReturnItem = (item) => ({
+  ...item,
+  trangThaiGoc: item?.trangThai,
+  loaiDoiTraGoc: item?.loaiDoiTra,
+  trangThai: RETURN_STATUS_NORMALIZER[item?.trangThai] || item?.trangThai,
+  loaiDoiTra: RETURN_TYPE_NORMALIZER[item?.loaiDoiTra] || item?.loaiDoiTra
+});
+
 // ...
 
-// Xác nhận thanh toán thủ công
-const confirmPaymentManual = (id) => {
-  confirmAction('Xác nhận đã hoàn tất giao dịch tiền mặt/chuyển khoản cho yêu cầu này?', async () => {
+const canApproveAfterKiem = computed(() => {
+  const list = selectedReturn.value?.chiTiets || [];
+  if (!list.length) return false;
+  return list.every((ct) => ct.benChiuLoi && ct.khopSanPham !== null && ct.khopSanPham !== undefined);
+});
+
+const handleKiemSaved = async () => {
+  showKiemModal.value = false;
+  await fetchReturns();
+  if (selectedReturn.value?.id) {
+    selectedReturn.value = allReturns.value.find((r) => r.id === selectedReturn.value.id) || selectedReturn.value;
+  }
+};
+
+const handleHoanTienSaved = async () => {
+  showHoanTienModal.value = false;
+  await fetchReturns();
+  if (selectedReturn.value?.id) {
+    selectedReturn.value = allReturns.value.find((r) => r.id === selectedReturn.value.id) || selectedReturn.value;
+  }
+};
+
+const xuLyKhangNghi = (id, action) => {
+  confirmAction(`Xác nhận ${action === 'REOPEN' ? 'mở lại kiểm tra' : 'giữ nguyên quyết định'}?`, async () => {
     try {
-      await axios.put(`${apiBaseUrl}/${id}/xac-nhan-thanh-toan`);
-      alert('Đã cập nhật trạng thái thanh toán!');
+      await returnApi.xuLyKhangNghi(id, { action, ghiChu: ghiChuAdmin.value || '' });
+      ElMessage.success('Đã xử lý kháng nghị');
       await fetchReturns();
-      if (selectedReturn.value) {
-        selectedReturn.value = allReturns.value.find(r => r.id === id);
+      if (selectedReturn.value?.id) {
+        selectedReturn.value = allReturns.value.find((r) => r.id === selectedReturn.value.id) || selectedReturn.value;
       }
     } catch (e) {
-      alert('Thao tác thất bại');
+      ElMessage.error(e?.response?.data?.error || 'Xử lý kháng nghị thất bại');
     }
   });
 };
@@ -66,12 +122,12 @@ const confirmPaymentManual = (id) => {
 const cancelRequest = (id) => {
   confirmAction('Bạn có chắc muốn HỦY yêu cầu này? Mọi trạng thái sẽ được đưa về CANCELLED.', async () => {
     try {
-      await axios.put(`${apiBaseUrl}/${id}/huy`, { ghiChu: ghiChuAdmin.value || 'Admin hủy yêu cầu' });
-      alert('Đã hủy yêu cầu.');
+      await returnApi.cancel(id, ghiChuAdmin.value || 'Admin hủy yêu cầu');
+      ElMessage.success('Đã hủy yêu cầu');
       await fetchReturns();
       showDetailModal.value = false;
     } catch (e) {
-      alert(e.response?.data?.error || 'Hủy thất bại');
+      ElMessage.error(e.response?.data?.error || 'Hủy thất bại');
     }
   });
 };
@@ -95,8 +151,8 @@ const formatDateTime = (v) => v ? new Date(v).toLocaleString('vi-VN') : 'Không 
 const fetchReturns = async () => {
   loading.value = true;
   try {
-    const res = await axios.get(apiBaseUrl);
-    allReturns.value = res.data.sort((a, b) => b.id - a.id);
+    const res = await returnApi.list();
+    allReturns.value = (Array.isArray(res.data) ? res.data : []).map(normalizeReturnItem).sort((a, b) => b.id - a.id);
   } catch (e) {
     console.error('Lỗi load đổi trả:', e);
   } finally {
@@ -107,7 +163,7 @@ const fetchReturns = async () => {
 // Xem nhật ký
 const viewLogs = async (item) => {
   try {
-    const res = await axios.get(`${apiBaseUrl}/logs/doi-tra/${item.id}`);
+    const res = await returnApi.logs(item.id);
     returnLogs.value = res.data;
     showLogModal.value = true;
   } catch (e) {
@@ -125,13 +181,6 @@ const parseImages = (jsonStr) => {
 const viewDetail = (item) => {
   selectedReturn.value = item;
   ghiChuAdmin.value = item.ghiChuAdmin || '';
-  qualityCheck.value = {};
-  // Khởi tạo qualityCheck: mặc định là false (Hàng tốt)
-  if (item.chiTiets) {
-    item.chiTiets.forEach(ct => {
-      qualityCheck.value[ct.id] = false;
-    });
-  }
   showDetailModal.value = true;
 };
 
@@ -146,12 +195,12 @@ const confirmAction = (message, callback) => {
 const approveRequest = (id) => {
   confirmAction('Xác nhận DUYỆT yêu cầu đổi trả này? Khách sẽ được thông báo gửi hàng về kho.', async () => {
     try {
-      await axios.put(`${apiBaseUrl}/${id}/xac-nhan`);
-      alert('Đã duyệt yêu cầu thành công!');
+      await returnApi.approve(id);
+      ElMessage.success('Đã duyệt yêu cầu thành công');
       await fetchReturns();
       showDetailModal.value = false;
     } catch (e) {
-      alert(e.response?.data?.error || 'Thao tác thất bại');
+      ElMessage.error(e.response?.data?.error || 'Thao tác thất bại');
     }
   });
 };
@@ -164,12 +213,12 @@ const rejectRequest = (id) => {
   }
   confirmAction('Xác nhận TỪ CHỐI yêu cầu đổi trả này?', async () => {
     try {
-      await axios.put(`${apiBaseUrl}/${id}/tu-choi`);
-      alert('Đã từ chối yêu cầu.');
+      await returnApi.reject(id, ghiChuAdmin.value || 'Từ chối');
+      ElMessage.success('Đã từ chối yêu cầu');
       await fetchReturns();
       showDetailModal.value = false;
     } catch (e) {
-      alert(e.response?.data?.error || 'Thao tác thất bại');
+      ElMessage.error(e.response?.data?.error || 'Thao tác thất bại');
     }
   });
 };
@@ -178,12 +227,12 @@ const rejectRequest = (id) => {
 const confirmReceived = (id) => {
   confirmAction('Xác nhận ĐÃ NHẬN HÀNG từ bưu cục? Chuyển sang khâu kiểm tra nội bộ.', async () => {
     try {
-      await axios.put(`${apiBaseUrl}/${id}/da-nhan-hang`);
-      alert('Đã xác nhận nhận hàng. Chuyển sang kiểm tra.');
+      await returnApi.received(id);
+      ElMessage.success('Đã xác nhận nhận hàng. Chuyển sang kiểm tra');
       await fetchReturns();
       showDetailModal.value = false;
     } catch (e) {
-      alert(e.response?.data?.error || 'Thao tác thất bại');
+      ElMessage.error(e.response?.data?.error || 'Thao tác thất bại');
     }
   });
 };
@@ -194,16 +243,12 @@ const approveDecision = (id) => {
     'Xác nhận HOÀN TẤT yêu cầu này? \n- Hàng tốt sẽ về kho bán, hàng lỗi vào kho riêng. \n- Hệ thống sẽ tự động xử lý tồn kho sản phẩm mới (nếu có).',
     async () => {
       try {
-        await axios.put(`${apiBaseUrl}/${id}/quyet-dinh`, { 
-          action: 'HOAN_THANH',
-          chiTietKiemKho: qualityCheck.value,
-          ghiChuAdmin: ghiChuAdmin.value
-        });
-        alert('Xử lý thành công!');
+        await returnApi.quyetDinh(id, 'HOAN_THANH', ghiChuAdmin.value || '');
+        ElMessage.success('Xử lý thành công');
         await fetchReturns();
         showDetailModal.value = false;
       } catch (e) {
-        alert(e.response?.data?.error || 'Thao tác thất bại. Vui lòng kiểm tra lại tồn kho SP đổi.');
+        ElMessage.error(e.response?.data?.error || 'Thao tác thất bại');
       }
     }
   );
@@ -217,15 +262,12 @@ const rejectAfterCheck = (id) => {
   }
   confirmAction('Xác nhận TỪ CHỐI yêu cầu sau khi kiểm tra? Hàng sẽ được gửi trả lại khách.', async () => {
     try {
-      await axios.put(`${apiBaseUrl}/${id}/quyet-dinh`, { 
-        action: 'TU_CHOI',
-        ghiChuAdmin: ghiChuAdmin.value
-      });
-      alert('Đã từ chối thành công.');
+      await returnApi.quyetDinh(id, 'TU_CHOI', ghiChuAdmin.value || '');
+      ElMessage.success('Đã từ chối thành công');
       await fetchReturns();
       showDetailModal.value = false;
     } catch (e) {
-      alert(e.response?.data?.error || 'Thao tác thất bại');
+      ElMessage.error(e.response?.data?.error || 'Thao tác thất bại');
     }
   });
 };
@@ -286,6 +328,11 @@ onMounted(fetchReturns);
                   </span>
                   <span :class="['small fw-bold', LOAI_DOI_TRA[item.loaiDoiTra]?.class]">
                     <i class="fas fa-sync-alt me-1"></i>{{ LOAI_DOI_TRA[item.loaiDoiTra]?.text }}
+                  </span>
+                </div>
+                <div v-if="item.trangThaiThanhToan" class="mb-1">
+                  <span :class="['badge rounded-pill px-2 border', STATUS_PAYMENT_MAP[item.trangThaiThanhToan]?.badge || 'bg-light text-muted']">
+                    {{ STATUS_PAYMENT_MAP[item.trangThaiThanhToan]?.text || item.trangThaiThanhToan }}
                   </span>
                 </div>
                 <p class="text-muted small mb-1">
@@ -393,7 +440,7 @@ onMounted(fetchReturns);
                     <th style="width: 40%;">Sản phẩm cũ</th>
                     <th class="text-center">SL</th>
                     <th v-if="selectedReturn.loaiDoiTra === 'EXCHANGE'">Đổi sang</th>
-                    <th v-if="selectedReturn.trangThai === 'DA_NHAN_HANG_KIEM_TRA'" class="text-center" style="width: 120px;">Kiểm kho</th>
+                    <th class="text-center" style="width: 150px;">Kiểm nội bộ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -409,18 +456,11 @@ onMounted(fetchReturns);
                       </div>
                       <div v-else class="text-muted small italic">N/A</div>
                     </td>
-                    <td v-if="selectedReturn.trangThai === 'DA_NHAN_HANG_KIEM_TRA'" class="text-center">
-                      <div class="form-check form-switch d-inline-block">
-                        <input 
-                          class="form-check-input" 
-                          type="checkbox" 
-                          v-model="qualityCheck[ct.id]"
-                          :id="'qc-' + ct.id"
-                        >
-                        <label class="form-check-label x-small" :for="'qc-' + ct.id">
-                          {{ qualityCheck[ct.id] ? 'Lỗi' : 'Tốt' }}
-                        </label>
-                      </div>
+                    <td class="text-center">
+                      <span v-if="ct.khopSanPham === false" class="badge bg-danger">Sai SKU</span>
+                      <span v-else-if="ct.khopSanPham === true" class="badge bg-success">Đúng SKU</span>
+                      <span v-else class="badge bg-secondary">Chưa kiểm</span>
+                      <div class="x-small mt-1" v-if="ct.benChiuLoi">{{ ct.benChiuLoi }}</div>
                     </td>
                   </tr>
                 </tbody>
@@ -441,6 +481,17 @@ onMounted(fetchReturns);
                 >
               </template>
               <p v-else class="text-muted small">Không có ảnh.</p>
+            </div>
+
+            <RefundBreakdown
+              v-if="['DA_NHAN_HANG_KIEM_TRA','HOAN_THANH','KHANG_NGHI'].includes(selectedReturn.trangThai)"
+              :doiTra="selectedReturn"
+              class="mb-3"
+            />
+
+            <div v-if="selectedReturn.trangThai === 'KHANG_NGHI'" class="alert alert-warning py-2 small">
+              <div><strong>Lý do kháng nghị:</strong> {{ selectedReturn.lyDoKhangNghi || 'Không có' }}</div>
+              <div><strong>Ngày kháng nghị:</strong> {{ formatDateTime(selectedReturn.ngayKhangNghi) }}</div>
             </div>
 
             <!-- Ghi chú Admin (Hiện khi cần thao tác hoặc đã hoàn thành) -->
@@ -473,8 +524,14 @@ onMounted(fetchReturns);
             </template>
 
             <template v-if="selectedReturn.trangThai === 'DA_NHAN_HANG_KIEM_TRA'">
+              <button class="btn btn-outline-primary rounded-pill px-4" @click="showKiemModal = true">Kiểm hàng</button>
               <button class="btn btn-outline-danger rounded-pill px-4" @click="rejectAfterCheck(selectedReturn.id)">Từ Chối (Trả hàng khách)</button>
-              <button class="btn btn-success rounded-pill px-4 fw-bold" @click="approveDecision(selectedReturn.id)">Hoàn Tất Phê Duyệt</button>
+              <button class="btn btn-success rounded-pill px-4 fw-bold" :disabled="!canApproveAfterKiem" @click="approveDecision(selectedReturn.id)">Hoàn Tất Phê Duyệt</button>
+            </template>
+
+            <template v-if="selectedReturn.trangThai === 'KHANG_NGHI'">
+              <button class="btn btn-outline-warning rounded-pill px-4" @click="xuLyKhangNghi(selectedReturn.id, 'REOPEN')">Mở lại kiểm tra</button>
+              <button class="btn btn-warning rounded-pill px-4 fw-bold" @click="xuLyKhangNghi(selectedReturn.id, 'GIU_NGUYEN')">Giữ nguyên</button>
             </template>
 
             <button 
@@ -485,12 +542,12 @@ onMounted(fetchReturns);
               Hủy Yêu Cầu
             </button>
 
-            <button 
-              v-if="selectedReturn.trangThaiThanhToan === 'CHUA_THANH_TOAN'"
-              class="btn btn-warning rounded-pill px-4 fw-bold" 
-              @click="confirmPaymentManual(selectedReturn.id)"
+            <button
+              v-if="selectedReturn.trangThai === 'HOAN_THANH' && ['CHO_HOAN_TIEN', 'CHUA_THANH_TOAN'].includes(selectedReturn.trangThaiThanhToan)"
+              class="btn btn-warning rounded-pill px-4 fw-bold"
+              @click="showHoanTienModal = true"
             >
-              <i class="fas fa-check-double me-1"></i> Xác nhận đã thanh toán/hoàn
+              <i class="fas fa-money-bill-wave me-1"></i> Xác nhận hoàn tiền
             </button>
 
             <button type="button" class="btn btn-light rounded-pill px-4" @click="showDetailModal = false">Đóng</button>
@@ -523,16 +580,34 @@ onMounted(fetchReturns);
         </div>
       </div>
     </div>
+    <KiemHangModal
+      :show="showKiemModal"
+      :doiTra="selectedReturn || {}"
+      @close="showKiemModal = false"
+      @saved="handleKiemSaved"
+    />
+
+    <HoanTienModal
+      :show="showHoanTienModal"
+      :doiTra="selectedReturn || {}"
+      @close="showHoanTienModal = false"
+      @saved="handleHoanTienSaved"
+    />
   </div>
 </template>
 
 <style scoped>
+.return-mgmt,
+.modal-content {
+  font-family: 'Montserrat', 'Inter', 'Segoe UI', 'Noto Sans', Arial, sans-serif;
+}
 .return-card { transition: all 0.2s ease; }
 .return-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.1) !important; }
 .x-small { font-size: 0.75rem; }
 .modal.show { display: block !important; }
 
 .table thead th {
+  font-family: 'Montserrat', sans-serif;
   font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;

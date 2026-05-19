@@ -56,6 +56,12 @@ const toggleSidebar = () => {
             <router-link to="/admin/returns" @click="isSidebarOpen = false" class="nav-link text-white small hover-link py-2"><i class="fas fa-undo-alt me-2"></i>Đổi trả</router-link>
           </li>
           <li class="nav-item">
+            <router-link to="/admin/return-policy" @click="isSidebarOpen = false" class="nav-link text-white small hover-link py-2"><i class="fas fa-sliders-h me-2"></i>Cấu hình đổi trả</router-link>
+          </li>
+          <li class="nav-item">
+            <router-link to="/admin/kho-loi" @click="isSidebarOpen = false" class="nav-link text-white small hover-link py-2"><i class="fas fa-exclamation-triangle me-2"></i>Kho lỗi</router-link>
+          </li>
+          <li class="nav-item">
             <router-link to="/admin/vouchers" @click="isSidebarOpen = false" class="nav-link text-white small hover-link py-2"><i class="fas fa-ticket-alt me-2"></i>Voucher</router-link>
           </li>
           <li class="nav-item">

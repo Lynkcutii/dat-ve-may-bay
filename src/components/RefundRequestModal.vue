@@ -19,29 +19,22 @@ const selectedItems = ref([]);
 const allProducts = ref([]);
 const submitting = ref(false);
 const errorMsg = ref('');
+const phuongThucThanhToanChenhLech = ref('COD');
 
-// Fetch danh sách sản phẩm (bao gồm biến thể)
+// Fetch danh sách biến thể cho user
 const fetchProducts = async () => {
   try {
-    const res = await axios.get(`${API_BASE_URL}/api/admin/products`);
+    const res = await axios.get(`${API_BASE_URL}/api/user/products/variants`);
     if (!res.data || !Array.isArray(res.data)) {
       console.warn("API trả về không đúng định dạng mảng");
       return;
     }
-    
-    let flattened = [];
-    res.data.forEach(p => {
-      const variants = p.details || p.variants || []; 
-      variants.forEach(v => {
-        flattened.push({
-          ...v,
-          productName: p.tenSanPham,
-          productId: p.id,
-          display: `${p.tenSanPham} [${v.mauSac?.ten || ''} - ${v.kichThuoc?.ten || ''}]`
-        });
-      });
-    });
-    allProducts.value = flattened;
+
+    allProducts.value = res.data.map(v => ({
+      ...v,
+      productId: v.productId,
+      display: `${v.productName || ''} [${v.mauSac || ''} - ${v.kichThuoc || ''}]`
+    }));
   } catch (error) {
     console.error("Lỗi fetch products:", error);
     errorMsg.value = "Không thể tải danh sách sản phẩm để đổi. Vui lòng kiểm tra kết nối API.";
@@ -58,6 +51,7 @@ watch(() => props.show, (val) => {
     selectedFiles.value = [];
     selectedItems.value = [];
     errorMsg.value = '';
+    phuongThucThanhToanChenhLech.value = 'COD';
     // Gọi lại để đảm bảo dữ liệu mới nhất
     fetchProducts();
 
@@ -80,18 +74,39 @@ watch(() => props.show, (val) => {
   }
 });
 
+// Tính giá trị thực tế của 1 sản phẩm sau khi phân bổ voucher
+const getEffectiveUnitPrice = (item) => {
+  const tongTienHang = Number(props.order?.tongTienHang || 1);
+  const tienGiam = Number(props.order?.tienGiam || 0);
+  const giaTriGoc = Number(item.donGia); // Giá 1 sản phẩm
+  const tienGiamPhanBo = Math.ceil((giaTriGoc * tienGiam) / tongTienHang);
+  return giaTriGoc - tienGiamPhanBo;
+};
+
 // Lọc kết quả tìm kiếm cho từng item
 const getFilteredVariants = (item) => {
   const s = item.searchQuery.toLowerCase();
+  const effectivePrice = getEffectiveUnitPrice(item);
+  
   if (!s && props.order?.loaiDonHang !== 'OFFLINE') return [];
+
+  let filtered = allProducts.value;
+
+  // Nếu là Đổi hàng: Chỉ hiện sản phẩm có giá >= giá thực tế sản phẩm cũ
+  if (loaiDoiTra.value === 'EXCHANGE') {
+    filtered = filtered.filter(v => v.giaBan >= effectivePrice);
+  }
 
   // Nếu Offline: Chỉ hiện các biến thể của chính sản phẩm đó
   if (props.order?.loaiDonHang === 'OFFLINE') {
-    const originalProductId = props.items.find(i => i.id === item.id)?.sanPhamChiTiet?.sanPham?.id;
-    return allProducts.value.filter(v => v.productId === originalProductId && v.display.toLowerCase().includes(s));
+    const originalProductName = props.items.find(i => i.id === item.id)?.sanPhamChiTiet?.sanPham?.tenSanPham;
+    filtered = filtered.filter(v => v.productName === originalProductName);
   }
 
-  return allProducts.value.filter(v => v.display.toLowerCase().includes(s) || v.ma?.toLowerCase().includes(s)).slice(0, 10);
+  return filtered.filter(v => 
+    v.display.toLowerCase().includes(s) || 
+    v.ma?.toLowerCase().includes(s)
+  ).slice(0, 10);
 };
 
 // Chọn sản phẩm mới
@@ -99,8 +114,8 @@ const selectVariant = (item, variant) => {
   item.spctMoi = {
     id: variant.id,
     tenSanPham: variant.productName,
-    mauSac: variant.mauSac?.ten,
-    kichThuoc: variant.kichThuoc?.ten,
+    mauSac: variant.mauSac,
+    kichThuoc: variant.kichThuoc,
     giaBan: variant.giaBan,
     ma: variant.ma
   };
@@ -109,6 +124,15 @@ const selectVariant = (item, variant) => {
 };
 
 // Tính tổng tiền hoàn (sau voucher)
+const handleQuantityInput = (item) => {
+  if (item.soLuongTra > item.soLuong) {
+    item.soLuongTra = item.soLuong;
+  }
+  if (item.soLuongTra < 1 || !item.soLuongTra) {
+    item.soLuongTra = 1;
+  }
+};
+
 const tongTienHoanValue = computed(() => {
   const tongTienHang = Number(props.order?.tongTienHang || 1);
   const tienGiam = Number(props.order?.tienGiam || 0);
@@ -161,7 +185,9 @@ const onFileChange = (e) => {
 
 const canSubmit = computed(() => {
   const selected = selectedItems.value.filter(i => i.checked && i.soLuongTra > 0);
-  const exchangeValid = loaiDoiTra.value === 'REFUND' || selected.every(i => i.spctMoi != null);
+  const exchangeValid = loaiDoiTra.value === 'REFUND' || selected.every(i => {
+    return i.spctMoi != null && i.spctMoi.giaBan >= getEffectiveUnitPrice(i);
+  });
   return selected.length > 0 && selectedFiles.value.length > 0 && lyDo.value.trim() && exchangeValid && !submitting.value;
 });
 
@@ -176,6 +202,7 @@ const submitRequest = async () => {
       hoaDonId: props.order.id,
       lyDo: lyDo.value.trim(),
       loaiDoiTra: loaiDoiTra.value,
+      phuongThucThanhToanChenhLech: loaiDoiTra.value === 'EXCHANGE' ? phuongThucThanhToanChenhLech.value : null,
       chiTiets: selectedItems.value.filter(i => i.checked).map(i => ({
         hoaDonChiTietId: i.id,
         soLuongTra: i.soLuongTra,
@@ -198,7 +225,7 @@ const submitRequest = async () => {
 <template>
   <div v-if="show" class="modal-backdrop fade show" @click="$emit('close')"></div>
   
-  <div class="modal fade" :class="{ show: show, 'd-block': show }" tabindex="-1">
+  <div class="modal fade" :class="{ show: show, 'd-block': show }">
     <div class="modal-dialog modal-lg modal-dialog-scrollable shadow-lg">
       <div class="modal-content border-0">
         <div class="modal-header border-0 bg-danger text-white">
@@ -274,7 +301,13 @@ const submitRequest = async () => {
                     </div>
                     <div class="x-small text-muted">Kho: {{ v.soLuong }} | Mã: {{ v.ma }}</div>
                   </button>
-                  <div v-if="getFilteredVariants(item).length === 0" class="list-group-item x-small text-muted">Không tìm thấy sản phẩm phù hợp</div>
+                  <div v-if="getFilteredVariants(item).length === 0" class="list-group-item x-small text-muted text-center py-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    {{ item.searchQuery ? 'Không tìm thấy sản phẩm phù hợp hoặc giá thấp hơn quy định' : 'Vui lòng nhập tên/mã sản phẩm' }}
+                    <div v-if="loaiDoiTra === 'EXCHANGE'" class="mt-1 text-primary fw-bold">
+                      Yêu cầu giá >= {{ formatPrice(getEffectiveUnitPrice(item)) }}
+                    </div>
+                  </div>
                 </div>
 
                 <div v-if="item.spctMoi" class="mt-2 p-2 border rounded bg-white d-flex justify-content-between align-items-center">
@@ -309,6 +342,20 @@ const submitRequest = async () => {
             </div>
           </div>
 
+          <div v-if="loaiDoiTra === 'EXCHANGE'" class="mb-3">
+            <label class="form-label fw-bold small">Phương thức thanh toán cho đơn mới *</label>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" id="pttt-cod" value="COD" v-model="phuongThucThanhToanChenhLech">
+                <label class="form-check-label" for="pttt-cod">COD</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" id="pttt-vnpay" value="VNPAY" v-model="phuongThucThanhToanChenhLech">
+                <label class="form-check-label" for="pttt-vnpay">VNPay</label>
+              </div>
+            </div>
+          </div>
+
           <div class="mb-3">
             <label class="form-label fw-bold small">Lý do & Ảnh minh chứng *</label>
             <textarea v-model="lyDo" class="form-control form-control-sm mb-2" rows="2" placeholder="Mô tả lý do..."></textarea>
@@ -329,6 +376,9 @@ const submitRequest = async () => {
 </template>
 
 <style scoped>
+.modal-content {
+  font-family: 'Montserrat', 'Inter', 'Segoe UI', 'Noto Sans', Arial, sans-serif;
+}
 .x-small { font-size: 0.75rem; }
 .product-item { transition: all 0.2s; }
 .modal.show { display: block !important; }

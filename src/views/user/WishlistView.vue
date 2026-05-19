@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { useWishlistStore } from '@/stores/wishlist';
 import { useCartStore } from '@/stores/cart';
 import { useAuthStore } from '@/stores/auth';
+import { ElMessage } from 'element-plus';
 
 const router = useRouter();
 const wishlistStore = useWishlistStore();
@@ -24,7 +25,7 @@ const removeFromWishlist = async (productId) => {
 
 const addToCart = async (product) => {
   if (!authStore.isAuthenticated) {
-    alert('Vui lòng đăng nhập để thêm vào giỏ hàng!');
+    ElMessage.warning('Vui lòng đăng nhập để thêm vào giỏ hàng!');
     router.push('/login');
     return;
   }

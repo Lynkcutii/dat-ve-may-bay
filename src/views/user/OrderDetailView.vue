@@ -54,7 +54,7 @@
           </div>
 
           <!-- Order Progress -->
-          <div class="order-progress mb-5 py-4 border-bottom" v-if="order.trangThaiDon !== 'DA_HUY' && order.trangThaiDon !== 'HOAN_TRA'">
+          <div class="order-progress mb-5 py-4 border-bottom" v-if="order.loaiDonHang !== 'TAI_QUAY' && order.trangThaiDon !== 'DA_HUY' && order.trangThaiDon !== 'HOAN_TRA'">
             <div class="d-flex justify-content-between position-relative">
               <div class="progress-line position-absolute w-100 top-50 translate-middle-y bg-light" style="height: 2px; z-index: 0;"></div>
               <div class="progress-line-active position-absolute top-50 translate-middle-y bg-success" :style="{ height: '2px', zIndex: 1, width: getProgressWidth(order.trangThaiDon) }"></div>
@@ -163,17 +163,23 @@
           </div>
 
           <div class="mt-5 pt-4 border-top text-end d-flex justify-content-end gap-3">
+            <button v-if="order.trangThaiDon === 'DANG_GIAO'" @click="handleConfirmReceived" class="btn btn-success rounded-pill px-5 py-2 fw-bold small">
+              <i class="fas fa-check-circle me-2"></i>ĐÃ NHẬN HÀNG
+            </button>
             <button v-if="order.trangThaiDon === 'DA_DAT' || order.trangThaiDon === 'CHO_XAC_NHAN'" @click="handleCancelOrder" class="btn btn-outline-danger rounded-pill px-5 py-2 fw-bold small">HỦY ĐƠN HÀNG</button>
-            <button v-if="canRequestRefund" @click="showRefundModal = true" class="btn btn-outline-warning rounded-pill px-5 py-2 fw-bold small">
+            <button v-if="hasReturnRequest" @click="router.push(`/order/return/${order.id}`)" class="btn btn-danger rounded-pill px-5 py-2 fw-bold small">
+              <i class="fas fa-undo-alt me-2"></i>XEM YÊU CẦU HOÀN TRẢ
+            </button>
+            <button v-if="canRequestRefund && !hasReturnRequest" @click="showRefundModal = true" class="btn btn-outline-warning rounded-pill px-5 py-2 fw-bold small">
               <i class="fas fa-undo-alt me-2"></i>YÊU CẦU HOÀN TRẢ
             </button>
             <button v-if="order.trangThaiDon === 'DA_GIAO'" @click="reorder" class="btn btn-dark rounded-pill px-5 py-2 fw-bold small">MUA LẠI ĐƠN HÀNG</button>
           </div>
 
           <!-- Thông báo đã có yêu cầu hoàn trả -->
-          <div v-if="order.hoanTra" class="alert alert-info mt-3 small">
+          <div v-if="hasReturnRequest" class="alert alert-info mt-3 small">
             <i class="fas fa-info-circle me-1"></i>
-            Đơn hàng này đã có yêu cầu hoàn trả vào {{ new Date(order.hoanTra).toLocaleString('vi-VN') }}
+            Đơn hàng này đã có yêu cầu hoàn trả{{ latestReturnRequestAt ? ` vào ${latestReturnRequestAt}` : '' }}
           </div>
         </div>
       </div>
@@ -197,6 +203,7 @@ import { useRoute, useRouter } from 'vue-router';
 import axios from 'axios';
 import { API_BASE_URL } from '@/config';
 import RefundRequestModal from '@/components/RefundRequestModal.vue';
+import { ElMessageBox, ElMessage } from 'element-plus';
 
 const route = useRoute();
 const router = useRouter();
@@ -205,15 +212,29 @@ const order = ref(null);
 const orderDetails = ref([]);
 const loading = ref(true);
 const showRefundModal = ref(false);
+const orderReturns = ref([]);
 
-// Kiểm tra có thể yêu cầu hoàn trả: DA_GIAO + chưa quá 7 ngày
+const RETURN_REQUEST_STATUSES = ['YEU_CAU_TRA_HANG', 'HOAN_TRA', 'HOAN_TRA_MOT_PHAN'];
+const hasReturnRequest = computed(() => {
+  const st = order.value?.trangThaiDon;
+  return !!st && RETURN_REQUEST_STATUSES.includes(st);
+});
+
+const latestReturnRequestAt = computed(() => {
+  if (!orderReturns.value?.length) return '';
+  const latest = [...orderReturns.value].sort((a, b) => {
+    const at = new Date(a?.ngayYeuCau || a?.ngayCapNhat || 0).getTime();
+    const bt = new Date(b?.ngayYeuCau || b?.ngayCapNhat || 0).getTime();
+    return bt - at;
+  })[0];
+  const ts = latest?.ngayYeuCau || latest?.ngayCapNhat;
+  return ts ? new Date(ts).toLocaleString('vi-VN') : '';
+});
+
+// Kiểm tra có thể yêu cầu hoàn trả: DA_GIAO
 const canRequestRefund = computed(() => {
   if (!order.value) return false;
-  if (order.value.trangThaiDon !== 'DA_GIAO') return false;
-  const ngayGiao = order.value.ngayCapNhat || order.value.ngayTao;
-  if (!ngayGiao) return false;
-  const diffDays = (Date.now() - new Date(ngayGiao).getTime()) / (1000 * 60 * 60 * 24);
-  return diffDays <= 7;
+  return order.value.trangThaiDon === 'DA_GIAO';
 });
 
 const steps = [
@@ -231,6 +252,7 @@ const fetchOrder = async () => {
     if (res.data) {
       order.value = res.data.bill;
       orderDetails.value = res.data.items;
+      orderReturns.value = Array.isArray(res.data.returns) ? res.data.returns : [];
     }
   } catch (error) {
     console.error("Error fetching order:", error);
@@ -240,14 +262,48 @@ const fetchOrder = async () => {
 };
 
 const handleCancelOrder = async () => {
-  if (confirm("Bạn có chắc chắn muốn hủy đơn hàng này?")) {
+  try {
+    await ElMessageBox.confirm(
+      "Bạn có chắc chắn muốn hủy đơn hàng này?",
+      "Xác nhận hủy đơn",
+      {
+        confirmButtonText: "Đồng ý",
+        cancelButtonText: "Hủy",
+        type: "warning",
+      }
+    );
     try {
       await axios.post(`${API_BASE_URL}/api/user/order/${order.value.id}/cancel`);
-      alert("Đã hủy đơn hàng thành công");
+      ElMessage.success("Đã hủy đơn hàng thành công");
       fetchOrder();
     } catch (error) {
-      alert(error.response?.data || "Hủy đơn hàng thất bại");
+      ElMessage.error(error.response?.data || "Hủy đơn hàng thất bại");
     }
+  } catch (error) {
+    // User cancelled
+  }
+};
+
+const handleConfirmReceived = async () => {
+  try {
+    await ElMessageBox.confirm(
+      "Bạn đã nhận được hàng và muốn xác nhận đơn hàng thành công?",
+      "Xác nhận nhận hàng",
+      {
+        confirmButtonText: "Đồng ý",
+        cancelButtonText: "Hủy",
+        type: "success",
+      }
+    );
+    try {
+      await axios.post(`${API_BASE_URL}/api/user/order/${order.value.id}/confirm-received`);
+      ElMessage.success("Xác nhận nhận hàng thành công");
+      fetchOrder();
+    } catch (error) {
+      ElMessage.error(error.response?.data || "Xác nhận nhận hàng thất bại");
+    }
+  } catch (error) {
+    // User cancelled
   }
 };
 
@@ -264,7 +320,6 @@ const formatStatus = (status) => {
     'DA_XAC_NHAN': 'Đã xác nhận',
     'DANG_GIAO': 'Đang giao',
     'DA_GIAO': 'Đã giao',
-    'DA_HUY': 'Đã hủy',
     'HOAN_TRA': 'Hoàn trả'
   };
   return map[status] || status;
@@ -272,7 +327,7 @@ const formatStatus = (status) => {
 
 const getStatusClass = (status) => {
   if (status === 'DA_GIAO') return 'bg-light text-success border-success';
-  if (status === 'DA_HUY') return 'bg-light text-danger border-danger';
+  if (status === 'HOAN_TRA') return 'bg-light text-warning border-warning';
   return 'bg-light text-primary border-primary';
 };
 

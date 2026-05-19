@@ -1,29 +1,26 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import axios from 'axios';
-import DateFilter from '@/components/DateFilter.vue';
+import { ElMessageBox, ElMessage } from 'element-plus';
 
 const products = ref([]);
 const loading = ref(true);
 const apiBaseUrl = 'http://localhost:8080/api/admin';
 
-const filterData = ref({ day: '', month: '', year: '' });
+const searchQuery = ref('');
 const currentPage = ref(1);
 const itemsPerPage = 10;
 
 const filteredProducts = computed(() => {
+  if (!searchQuery.value) return products.value;
+  
+  const query = searchQuery.value.toLowerCase();
   return products.value.filter(product => {
-    if (!product.ngayTao) return true;
-    const date = new Date(product.ngayTao);
-    const d = date.getDate();
-    const m = date.getMonth() + 1;
-    const y = date.getFullYear();
-
-    if (filterData.value.day && d !== parseInt(filterData.value.day)) return false;
-    if (filterData.value.month && m !== parseInt(filterData.value.month)) return false;
-    if (filterData.value.year && y !== parseInt(filterData.value.year)) return false;
-
-    return true;
+    return (
+      product.tenSanPham?.toLowerCase().includes(query) ||
+      product.id?.toString().includes(query) ||
+      product.ma?.toLowerCase().includes(query)
+    );
   });
 });
 
@@ -33,11 +30,6 @@ const paginatedProducts = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage;
   return filteredProducts.value.slice(start, start + itemsPerPage);
 });
-
-const handleFilter = (data) => {
-  filterData.value = data;
-  currentPage.value = 1;
-};
 
 function getTotalQuantity(product) {
   if (!product) return 0;
@@ -63,15 +55,26 @@ onMounted(() => {
 });
 
 const toggleStatus = async (product) => {
-  if (confirm(`Bạn có muốn ${product.trangThai ? 'ngừng bán' : 'tiếp tục bán'} sản phẩm "${product.tenSanPham}"?`)) {
+  try {
+    await ElMessageBox.confirm(
+      `Bạn có muốn ${product.trangThai ? 'ngừng bán' : 'tiếp tục bán'} sản phẩm "${product.tenSanPham}"?`,
+      'Xác nhận thay đổi',
+      {
+        confirmButtonText: 'Đồng ý',
+        cancelButtonText: 'Hủy',
+        type: 'warning',
+      }
+    );
     try {
       await axios.put(`${apiBaseUrl}/products/${product.id}/toggle-status`);
-      alert('Cập nhật trạng thái thành công!');
+      ElMessage.success('Cập nhật trạng thái thành công!');
       fetchProducts();
     } catch (error) {
       console.error('Error toggling product status:', error);
-      alert('Cập nhật thất bại!');
+      ElMessage.error('Cập nhật thất bại!');
     }
+  } catch (error) {
+    // User cancelled
   }
 };
 </script>
@@ -85,7 +88,31 @@ const toggleStatus = async (product) => {
       </router-link>
     </div>
 
-    <DateFilter @filter="handleFilter" />
+    <div class="card border-0 shadow-sm rounded-3 mb-4">
+      <div class="card-body p-3">
+        <div class="row align-items-center">
+          <div class="col-md-6">
+            <div class="input-group">
+              <span class="input-group-text bg-white border-end-0">
+                <i class="fas fa-search text-muted"></i>
+              </span>
+              <input 
+                v-model="searchQuery" 
+                type="text" 
+                class="form-control border-start-0 ps-0" 
+                placeholder="Tìm kiếm theo tên hoặc mã sản phẩm..."
+                @input="currentPage = 1"
+              >
+            </div>
+          </div>
+          <div class="col-md-6 text-end">
+            <button @click="searchQuery = ''; currentPage = 1" class="btn btn-outline-secondary rounded-pill px-3">
+              <i class="fas fa-undo me-1"></i> Làm mới
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div v-if="loading" class="text-center py-5">
       <div class="spinner-border text-danger" role="status">
@@ -145,15 +172,17 @@ const toggleStatus = async (product) => {
                   </span>
                 </td>
                 <td class="text-end pe-4">
-                  <router-link :to="{ path: '/admin/products/edit/' + product.id, query: { mode: 'view' } }" class="btn btn-sm btn-outline-info me-2" title="Xem chi tiết">
-                    <i class="fas fa-eye"></i>
-                  </router-link>
-                  <router-link :to="'/admin/products/edit/' + product.id" class="btn btn-sm btn-outline-primary me-2" title="Sửa">
-                    <i class="fas fa-edit"></i>
-                  </router-link>
-                  <button @click="toggleStatus(product)" class="btn btn-sm btn-outline-danger" title="Đổi trạng thái">
-                    <i class="fas fa-trash"></i>
-                  </button>
+                  <div class="d-flex justify-content-end gap-2">
+                    <router-link :to="{ path: '/admin/products/edit/' + product.id, query: { mode: 'view' } }" class="btn btn-icon btn-light rounded-circle shadow-sm" title="Xem chi tiết">
+                      <i class="fas fa-eye text-info"></i>
+                    </router-link>
+                    <router-link :to="'/admin/products/edit/' + product.id" class="btn btn-icon btn-light rounded-circle shadow-sm" title="Sửa">
+                      <i class="fas fa-edit text-primary"></i>
+                    </router-link>
+                    <button @click="toggleStatus(product)" class="btn btn-icon btn-light rounded-circle shadow-sm" title="Đổi trạng thái">
+                      <i class="fas fa-trash text-danger"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -174,5 +203,23 @@ const toggleStatus = async (product) => {
 
 .table tbody td {
   padding: 15px 10px;
+}
+
+.btn-icon {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s;
+}
+
+.btn-icon:hover {
+  transform: translateY(-2px);
+}
+
+.transition-all {
+  transition: all 0.25s ease-in-out;
 }
 </style>
